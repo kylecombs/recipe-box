@@ -1,0 +1,103 @@
+// schema.prisma
+datasource db {
+  provider = "mysql" // Changed from postgresql
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id             String           @id @default(uuid())
+  email          String           @unique
+  name           String?
+  password       String // Hashed password
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  recipes        Recipe[]
+  groceryLists   GroceryList[]
+}
+
+model Recipe {
+  id              String           @id @default(uuid())
+  title           String
+  description     String?
+  sourceUrl       String?
+  imageUrl        String?
+  prepTime        Int? // In minutes
+  cookTime        Int? // In minutes
+  servings        Int?
+  userId          String
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ingredients     Ingredient[]
+  instructions    Instruction[]
+  tags            RecipeTag[]
+  groceryListItems GroceryListItem[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+model Ingredient {
+  id              String           @id @default(uuid())
+  name            String
+  quantity        String?
+  unit            String?
+  notes           String?
+  recipeId        String
+  recipe          Recipe           @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+model Instruction {
+  id              String           @id @default(uuid())
+  stepNumber      Int
+  description     String
+  recipeId        String
+  recipe          Recipe           @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+model Tag {
+  id              String           @id @default(uuid())
+  name            String           @unique
+  recipes         RecipeTag[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+model RecipeTag {
+  recipeId        String
+  tagId           String
+  recipe          Recipe           @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  tag             Tag              @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  assignedAt      DateTime         @default(now())
+
+  @@id([recipeId, tagId])
+}
+
+model GroceryList {
+  id              String           @id @default(uuid())
+  name            String
+  userId          String
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items           GroceryListItem[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+model GroceryListItem {
+  id              String           @id @default(uuid())
+  name            String
+  quantity        String?
+  unit            String?
+  checked         Boolean          @default(false)
+  recipeId        String?
+  recipe          Recipe?          @relation(fields: [recipeId], references: [id], onDelete: SetNull)
+  groceryListId   String
+  groceryList     GroceryList      @relation(fields: [groceryListId], references: [id], onDelete: Cascade)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+} 

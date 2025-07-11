@@ -1,0 +1,19 @@
+version: '3.8'
+services:
+  db:
+    image: mysql:8.0
+    cap_add:
+      - SYS_NICE # Increase scheduling priority for faster startup (optional)
+    restart: always
+    environment:
+      MYSQL_DATABASE: mydb
+      MYSQL_USER: kylecombs
+      MYSQL_PASSWORD: randompassword
+      MYSQL_ROOT_PASSWORD: rootpassword # Set a root password (can be different)
+    ports:
+      - "3306:3306" # Map host port 3306 to container port 3306
+    volumes:
+      - mysql_data:/var/lib/mysql # Persist data
+
+volumes:
+  mysql_data: 
