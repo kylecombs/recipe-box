@@ -1,4 +1,5 @@
 import { JSDOM } from 'jsdom';
+import { parseIngredient as parseIngredientNLP, parseIngredientsBatch } from './ingredient-parser.server';
 
 function decodeHtmlEntities(text: string): string {
   // Create a temporary DOM element to decode HTML entities
@@ -64,7 +65,7 @@ export async function parseRecipeFromUrl(url: string): Promise<RecipeData | null
           
         if (recipe) {
           console.log('Found recipe in JSON-LD');
-          const parsed = parseJsonLdRecipe(recipe);
+          const parsed = await parseJsonLdRecipe(recipe);
           console.log('Parsed recipe:', {
             title: parsed.title,
             ingredientsCount: parsed.ingredients.length,
@@ -79,7 +80,7 @@ export async function parseRecipeFromUrl(url: string): Promise<RecipeData | null
     
     console.log('No JSON-LD recipe found, falling back to microdata');
     // Fallback to microdata parsing
-    return parseMicrodataRecipe(document);
+    return await parseMicrodataRecipe(document);
     
   } catch (error) {
     console.error('Error parsing recipe from URL:', error);
@@ -87,17 +88,43 @@ export async function parseRecipeFromUrl(url: string): Promise<RecipeData | null
   }
 }
 
-function parseJsonLdRecipe(recipe: Record<string, unknown>): RecipeData {
+async function parseJsonLdRecipe(recipe: Record<string, unknown>): Promise<RecipeData> {
   console.log('Recipe properties:', Object.keys(recipe));
   
-  const ingredients = Array.isArray(recipe.recipeIngredient) 
-    ? (recipe.recipeIngredient as unknown[]).map((ing: unknown) => {
-        if (typeof ing === 'string') {
-          return parseIngredientText(ing);
-        }
-        return { name: String(ing) };
-      })
+  // Collect all ingredient strings for batch parsing
+  const ingredientTexts: string[] = [];
+  const ingredientMapping: Array<{ index: number; original: unknown; isString: boolean }> = [];
+  
+  if (Array.isArray(recipe.recipeIngredient)) {
+    (recipe.recipeIngredient as unknown[]).forEach((ing: unknown) => {
+      if (typeof ing === 'string') {
+        ingredientTexts.push(ing);
+        ingredientMapping.push({ index: ingredientTexts.length - 1, original: ing, isString: true });
+      } else {
+        ingredientMapping.push({ index: -1, original: ing, isString: false });
+      }
+    });
+  }
+  
+  // Parse all ingredients in batch
+  const parsedIngredients = ingredientTexts.length > 0 
+    ? await parseIngredientsBatch(ingredientTexts)
     : [];
+  
+  // Map results back to ingredients array
+  const ingredients = ingredientMapping.map(mapping => {
+    if (mapping.isString && mapping.index >= 0) {
+      const parsed = parsedIngredients[mapping.index];
+      return {
+        name: parsed.name || String(mapping.original),
+        quantity: parsed.quantity || undefined,
+        unit: parsed.unit || undefined,
+        notes: parsed.comment || undefined,
+      };
+    } else {
+      return { name: String(mapping.original) };
+    }
+  });
     
   // Handle different instruction formats
   let instructions: string[] = [];
@@ -135,7 +162,7 @@ function parseJsonLdRecipe(recipe: Record<string, unknown>): RecipeData {
   };
 }
 
-function parseMicrodataRecipe(document: Document): RecipeData {
+async function parseMicrodataRecipe(document: Document): Promise<RecipeData> {
   const getTextContent = (selector: string) => 
     document.querySelector(selector)?.textContent?.trim() || '';
     
@@ -451,42 +478,66 @@ function parseMicrodataRecipe(document: Document): RecipeData {
     prepTimeMinutes: parseTimeToMinutes(prepTime),
     cookTimeMinutes: parseTimeToMinutes(cookTime),
     servings: parseServings(servings),
-    ingredients: ingredientTexts.filter(Boolean).map(text => {
-      const parsed = parseIngredientText(text);
-      return {
-        ...parsed,
-        name: decodeHtmlEntities(parsed.name),
-        notes: parsed.notes ? decodeHtmlEntities(parsed.notes) : parsed.notes
-      };
-    }),
+    ingredients: await Promise.all(
+      ingredientTexts.filter(Boolean).map(async text => {
+        const parsed = await parseIngredientText(text);
+        return {
+          ...parsed,
+          name: decodeHtmlEntities(parsed.name),
+          notes: parsed.notes ? decodeHtmlEntities(parsed.notes) : parsed.notes
+        };
+      })
+    ),
     instructions: instructionTexts.filter((text): text is string => Boolean(text)).map(decodeHtmlEntities),
     tags: generateSmartTags(document, title, description, ingredientTexts.filter((text): text is string => Boolean(text)))
   };
 }
 
-function parseIngredientText(text: string | undefined): {
+async function parseIngredientText(text: string | undefined): Promise<{
   name: string;
   quantity?: string;
   unit?: string;
   notes?: string;
-} {
+}> {
   if (!text) return { name: "" };
-  // Simple ingredient parsing - could be enhanced with more sophisticated NLP
-  const cleanText = text.trim();
   
-  // Try to extract quantity and unit from the beginning
-  const quantityMatch = cleanText.match(/^(\d+(?:\/\d+)?(?:\.\d+)?)\s*([a-zA-Z]+)?\s+(.+)/);
-  
-  if (quantityMatch) {
-    const [, quantity, unit, name] = quantityMatch;
-    return {
-      name: name.trim(),
-      quantity: quantity.trim(),
-      unit: unit?.trim(),
-    };
+  try {
+    // Use the NLP-based parser service
+    const parsed = await parseIngredientNLP(text.trim());
+    
+    // Check if the NLP parser actually extracted useful information
+    if (parsed.quantity && parsed.unit && parsed.name !== text.trim()) {
+      // NLP parser worked, use its results
+      return {
+        name: parsed.name || text.trim(),
+        quantity: parsed.quantity || undefined,
+        unit: parsed.unit || undefined,
+        notes: parsed.comment || undefined,
+      };
+    } else {
+      // NLP parser didn't extract useful info, use fallback
+      throw new Error('NLP parser did not extract useful information');
+    }
+  } catch (error) {
+    console.error('NLP parser failed, using fallback parsing:', error);
+    
+    // Fallback to basic parsing if NLP service is unavailable
+    const cleanText = text.trim();
+    
+    // Simple regex fallback for basic quantity + unit + name patterns
+    const quantityMatch = cleanText.match(/^(\d+(?:\s+\d+\/\d+|\.\d+|\/\d+)?)\s+([a-zA-Z]+)\s+(.+)/);
+    if (quantityMatch) {
+      const [, quantity, unit, name] = quantityMatch;
+      return {
+        name: name.trim(),
+        quantity: quantity.trim(),
+        unit: unit.trim(),
+      };
+    }
+    
+    // Return original text as name if parsing fails
+    return { name: cleanText };
   }
-  
-  return { name: cleanText };
 }
 
 function parseTimeToMinutes(timeStr: string): number | undefined {

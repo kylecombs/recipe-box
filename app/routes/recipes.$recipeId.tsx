@@ -1,9 +1,10 @@
 import { json, LoaderFunctionArgs, ActionFunctionArgs, redirect } from "@remix-run/node";
 import { useLoaderData, Link, Form, useActionData, useNavigation } from "@remix-run/react";
-import { ArrowLeft, Clock, Users, ExternalLink, Edit2, Save, X, Plus, Trash2, Upload, StickyNote, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Clock, Users, ExternalLink, Edit2, Save, X, Plus, Trash2, Upload, StickyNote, AlertTriangle, ShoppingCart } from "lucide-react";
 import { useState, useEffect } from "react";
 import { db } from "~/utils/db.server";
 import { requireUserId } from "~/utils/auth.server";
+import { areIngredientsEqual, combineQuantities, getCanonicalIngredientName } from "~/utils/ingredient-matcher.server";
 import IngredientsList from "~/components/IngredientsList";
 import InstructionsList from "~/components/InstructionsList";
 import TagsList from "~/components/TagsList";
@@ -41,7 +42,19 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     throw new Response("Recipe not found", { status: 404 });
   }
 
-  return json({ recipe });
+  // Also fetch user's grocery lists
+  const groceryLists = await db.groceryList.findMany({
+    where: { userId },
+    include: { items: true }
+  });
+
+  // Fetch notes separately
+  const notes = await (db as any).note.findMany({
+    where: { recipeId },
+    orderBy: { createdAt: 'desc' }
+  });
+
+  return json({ recipe, groceryLists, notes });
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
@@ -68,7 +81,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         include: {
           ingredients: true,
           instructions: true,
-          tags: { include: { tag: true } }
+          tags: { include: { tag: true } },
         }
       });
 
@@ -76,23 +89,13 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         throw new Response("Recipe not found", { status: 404 });
       }
 
-      // Add new note to the notes array
-      const newNote = {
-        id: `note-${Date.now()}`,
-        text: noteText.trim(),
-        createdAt: new Date()
-      };
-      
-      const updatedRecipe = {
-        ...existingRecipe,
-        notes: [...(existingRecipe.notes || []), newNote],
-        updatedAt: new Date()
-      };
-
-      const recipes = (global as any).__recipes as Map<string, any>;
-      if (recipes && recipes.has(recipeId)) {
-        recipes.set(recipeId, updatedRecipe);
-      }
+      // Add new note using Prisma
+      await (db as any).note.create({
+        data: {
+          text: noteText.trim(),
+          recipeId: recipeId
+        }
+      });
 
       return json({ success: true, quickNote: true });
     } catch (error) {
@@ -110,7 +113,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         include: {
           ingredients: true,
           instructions: true,
-          tags: { include: { tag: true } }
+          tags: { include: { tag: true } },
         }
       });
 
@@ -118,17 +121,10 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         throw new Response("Recipe not found", { status: 404 });
       }
 
-      // Remove the note
-      const updatedRecipe = {
-        ...existingRecipe,
-        notes: (existingRecipe.notes || []).filter(note => note.id !== noteId),
-        updatedAt: new Date()
-      };
-
-      const recipes = (global as any).__recipes as Map<string, any>;
-      if (recipes && recipes.has(recipeId)) {
-        recipes.set(recipeId, updatedRecipe);
-      }
+      // Remove the note using Prisma
+      await (db as any).note.delete({
+        where: { id: noteId }
+      });
 
       return json({ success: true, deleteNote: true });
     } catch (error) {
@@ -151,6 +147,140 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     } catch (error) {
       console.error("Error deleting recipe:", error);
       return json({ error: "Failed to delete recipe" }, { status: 500 });
+    }
+  }
+  
+  if (intent === "addToGroceryList") {
+    const groceryListId = formData.get("groceryListId")?.toString();
+    const newListName = formData.get("newListName")?.toString();
+    
+    try {
+      const recipe = await db.recipe.findFirst({
+        where: { id: recipeId, userId },
+        include: {
+          ingredients: true,
+          instructions: true,
+          tags: { include: { tag: true } },
+        }
+      });
+
+      if (!recipe) {
+        throw new Response("Recipe not found", { status: 404 });
+      }
+
+      let targetListId = groceryListId;
+      
+      // Create new list if requested
+      if (!groceryListId && newListName?.trim()) {
+        const newList = await db.groceryList.create({
+          data: {
+            name: newListName.trim(),
+            userId
+          }
+        });
+        targetListId = newList.id;
+      }
+      
+      if (!targetListId) {
+        return json({ error: "No grocery list selected" }, { status: 400 });
+      }
+
+      // Get the target grocery list
+      const groceryList = await db.groceryList.findFirst({
+        where: { id: targetListId, userId },
+        include: { items: true }
+      });
+
+      if (!groceryList) {
+        return json({ error: "Grocery list not found" }, { status: 404 });
+      }
+
+      // Combine recipe ingredients with existing grocery list items
+      const existingItems = groceryList.items || [];
+      
+      // Convert existing items to the format needed for createMany
+      const newItems = existingItems.map(item => ({
+        name: item.name,
+        quantity: item.quantity,
+        unit: item.unit,
+        checked: item.checked,
+        groceryListId: targetListId
+      }));
+
+      // Add recipe ingredients
+      for (const ingredient of recipe.ingredients) {
+        // Skip common pantry staples like salt and pepper
+        const canonicalName = getCanonicalIngredientName(ingredient.name);
+        const originalName = ingredient.name.toLowerCase();
+        const saltPepperVariants = [
+          'salt', 'pepper', 'black pepper', 'white pepper', 'sea salt', 'kosher salt', 'table salt',
+          'freshly ground pepper', 'freshly ground black pepper', 'ground pepper', 'ground black pepper',
+          'cracked pepper', 'cracked black pepper', 'fine salt', 'coarse salt', 'rock salt'
+        ];
+        
+        if (saltPepperVariants.some(variant => 
+          canonicalName.toLowerCase() === variant || 
+          originalName.includes(variant)
+        )) {
+          continue;
+        }
+
+        // Find existing item using intelligent matching
+        const existingItemIndex = newItems.findIndex(
+          item => areIngredientsEqual(item.name, ingredient.name)
+        );
+
+        if (existingItemIndex >= 0) {
+          // Combine with existing item - use basic combination for now
+          const existingItem = newItems[existingItemIndex];
+          const combinedResult = combineQuantities(
+            existingItem.quantity,
+            existingItem.unit,
+            ingredient.quantity,
+            ingredient.unit,
+            existingItem.name,
+            ingredient.name
+          );
+          
+          // Update existing item
+          newItems[existingItemIndex] = {
+            ...existingItem,
+            name: canonicalName,
+            quantity: combinedResult.quantity,
+            unit: combinedResult.unit
+          };
+        } else {
+          // Add new item
+          newItems.push({
+            name: canonicalName,
+            quantity: ingredient.quantity,
+            unit: ingredient.unit,
+            checked: false,
+            groceryListId: targetListId
+          });
+        }
+      }
+
+      // Delete existing items and create new ones
+      await db.groceryListItem.deleteMany({
+        where: { groceryListId: targetListId }
+      });
+      
+      // Create new items
+      if (newItems.length > 0) {
+        await db.groceryListItem.createMany({
+          data: newItems
+        });
+      }
+
+      return json({ 
+        success: true, 
+        addedToGroceryList: true,
+        groceryListName: groceryList.name 
+      });
+    } catch (error) {
+      console.error("Error adding to grocery list:", error);
+      return json({ error: "Failed to add to grocery list" }, { status: 500 });
     }
   }
   
@@ -197,13 +327,13 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     }
 
     try {
-      // For our mock database, we need to update the recipe
+      // Update the recipe using Prisma
       const existingRecipe = await db.recipe.findFirst({
         where: { id: recipeId, userId },
         include: {
           ingredients: true,
           instructions: true,
-          tags: { include: { tag: true } }
+          tags: { include: { tag: true } },
         }
       });
 
@@ -211,26 +341,50 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         throw new Response("Recipe not found", { status: 404 });
       }
 
-      // Update the recipe in our mock database
-      const updatedRecipe = {
-        ...existingRecipe,
-        title,
-        description: description || null,
-        prepTime: prepTime ? parseInt(prepTime) : null,
-        cookTime: cookTime ? parseInt(cookTime) : null,
-        servings: servings ? parseInt(servings) : null,
-        imageUrl: imageUrl || null,
-        notes: existingRecipe.notes || [],
-        ingredients,
-        instructions,
-        updatedAt: new Date()
-      };
-
-      // In a real implementation, this would use db.recipe.update()
-      // For our mock, we'll simulate the update
-      const recipes = (global as any).__recipes as Map<string, any>;
-      if (recipes && recipes.has(recipeId)) {
-        recipes.set(recipeId, updatedRecipe);
+      // Update the recipe using Prisma
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: {
+          title,
+          description: description || null,
+          prepTime: prepTime ? parseInt(prepTime) : null,
+          cookTime: cookTime ? parseInt(cookTime) : null,
+          servings: servings ? parseInt(servings) : null,
+          imageUrl: imageUrl || null,
+        }
+      });
+      
+      // Delete existing ingredients and instructions, then recreate them
+      await db.ingredient.deleteMany({
+        where: { recipeId }
+      });
+      
+      await db.instruction.deleteMany({
+        where: { recipeId }
+      });
+      
+      // Create new ingredients
+      if (ingredients.length > 0) {
+        await db.ingredient.createMany({
+          data: ingredients.map(ing => ({
+            name: ing.name,
+            quantity: ing.quantity,
+            unit: ing.unit,
+            notes: ing.notes,
+            recipeId: recipeId
+          }))
+        });
+      }
+      
+      // Create new instructions
+      if (instructions.length > 0) {
+        await db.instruction.createMany({
+          data: instructions.map(inst => ({
+            stepNumber: inst.stepNumber,
+            description: inst.description,
+            recipeId: recipeId
+          }))
+        });
       }
 
       return json({ success: true });
@@ -244,7 +398,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 };
 
 export default function RecipeDetail() {
-  const { recipe } = useLoaderData<typeof loader>();
+  const { recipe, groceryLists, notes } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const [isEditing, setIsEditing] = useState(false);
@@ -257,21 +411,30 @@ export default function RecipeDetail() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showGroceryListModal, setShowGroceryListModal] = useState(false);
+  const [selectedGroceryListId, setSelectedGroceryListId] = useState<string>('');
+  const [newGroceryListName, setNewGroceryListName] = useState('');
 
   // Handle action responses
   useEffect(() => {
     if (actionData && !isSubmitting) {
-      if (actionData.success) {
-        if (actionData.quickNote) {
+      if ('success' in actionData && actionData.success) {
+        if ('quickNote' in actionData && actionData.quickNote) {
           setIsAddingNote(false);
           setToast({ message: 'Note added!', type: 'success' });
-        } else if (actionData.deleteNote) {
+        } else if ('deleteNote' in actionData && actionData.deleteNote) {
           setToast({ message: 'Note deleted!', type: 'success' });
+        } else if ('addedToGroceryList' in actionData && actionData.addedToGroceryList) {
+          setShowGroceryListModal(false);
+          setSelectedGroceryListId('');
+          setNewGroceryListName('');
+          const listName = 'groceryListName' in actionData ? actionData.groceryListName : 'grocery list';
+          setToast({ message: `Ingredients added to ${listName}!`, type: 'success' });
         } else {
           setIsEditing(false);
           setToast({ message: 'Recipe updated successfully!', type: 'success' });
         }
-      } else if (actionData.error) {
+      } else if ('error' in actionData && actionData.error) {
         setToast({ message: actionData.error, type: 'error' });
       }
     }
@@ -295,8 +458,8 @@ export default function RecipeDetail() {
       unit: null,
       notes: null,
       recipeId: recipe.id,
-      createdAt: new Date(),
-      updatedAt: new Date()
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     }]);
   };
   
@@ -310,8 +473,8 @@ export default function RecipeDetail() {
       stepNumber: editableInstructions.length + 1,
       description: '',
       recipeId: recipe.id,
-      createdAt: new Date(),
-      updatedAt: new Date()
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     }]);
   };
   
@@ -401,7 +564,7 @@ export default function RecipeDetail() {
                       {imagePreview ? 'New Image Preview' : 'Current Image'}
                     </label>
                     <img
-                      src={imagePreview || recipe.imageUrl}
+                      src={imagePreview || recipe.imageUrl || ''}
                       alt={recipe.title}
                       className="w-full h-32 object-cover rounded-lg"
                     />
@@ -434,9 +597,9 @@ export default function RecipeDetail() {
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <div className="block text-sm font-medium text-gray-700 mb-1">
                       Or Upload Image
-                    </label>
+                    </div>
                     <div className="flex items-center gap-3">
                       <label className="cursor-pointer inline-flex items-center px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-200">
                         <Upload size={16} className="mr-2" />
@@ -718,7 +881,16 @@ export default function RecipeDetail() {
           <div className="grid lg:grid-cols-3 gap-8">
             {/* Ingredients */}
             <div className="lg:col-span-1">
-              <IngredientsList ingredients={recipe.ingredients} />
+              <div className="mb-4 space-y-4">
+                <IngredientsList ingredients={recipe.ingredients} />
+                  <button
+                    onClick={() => setShowGroceryListModal(true)}
+                    className="inline-flex items-center px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"
+                  >
+                    <ShoppingCart size={16} className="mr-2" />
+                    Add to Grocery List
+                  </button>
+              </div>
             </div>
             
             {/* Instructions */}
@@ -750,6 +922,7 @@ export default function RecipeDetail() {
                     rows={3}
                     placeholder="Add your note here..."
                     className="w-full px-3 py-2 border border-yellow-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                    // eslint-disable-next-line jsx-a11y/no-autofocus
                     autoFocus
                   />
                   <div className="flex gap-2">
@@ -774,11 +947,9 @@ export default function RecipeDetail() {
             )}
             
             {/* Notes List */}
-            {recipe.notes && recipe.notes.length > 0 ? (
+            {notes && notes.length > 0 ? (
               <div className="space-y-3">
-                {recipe.notes
-                  .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                  .map((note) => (
+                {notes.map((note: any) => (
                     <div key={note.id} className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                       <div className="flex justify-between items-start gap-3">
                         <div className="flex-1">
@@ -811,7 +982,7 @@ export default function RecipeDetail() {
             ) : (
               <div className="text-center py-8 text-gray-500">
                 <StickyNote size={48} className="mx-auto mb-2 text-gray-300" />
-                <p>No notes yet. Click "Add Note" to get started!</p>
+                <p>No notes yet. Click &ldquo;Add Note&rdquo; to get started!</p>
               </div>
             )}
           </div>
@@ -828,7 +999,7 @@ export default function RecipeDetail() {
             </div>
             
             <p className="text-gray-600 mb-6">
-              Are you sure you want to delete "{recipe.title}"? This action cannot be undone.
+              Are you sure you want to delete &ldquo;{recipe.title}&rdquo;? This action cannot be undone.
             </p>
             
             <div className="flex gap-3 justify-end">
@@ -850,6 +1021,99 @@ export default function RecipeDetail() {
                 </button>
               </Form>
             </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Grocery List Modal */}
+      {showGroceryListModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <div className="flex items-center mb-4">
+              <ShoppingCart size={24} className="text-green-600 mr-3" />
+              <h3 className="text-lg font-semibold text-gray-900">Add to Grocery List</h3>
+            </div>
+            
+            <Form method="post" className="space-y-4">
+              <input type="hidden" name="intent" value="addToGroceryList" />
+              
+              {groceryLists.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select existing list:
+                  </label>
+                  <select
+                    name="groceryListId"
+                    value={selectedGroceryListId}
+                    onChange={(e) => {
+                      setSelectedGroceryListId(e.target.value);
+                      if (e.target.value) setNewGroceryListName('');
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="">-- Select a list --</option>
+                    {groceryLists.map((list) => (
+                      <option key={list.id} value={list.id}>
+                        {list.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              
+              <div className="text-center text-sm text-gray-500">
+                {groceryLists.length > 0 ? 'or' : ''}
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Create new list:
+                </label>
+                <input
+                  type="text"
+                  name="newListName"
+                  value={newGroceryListName}
+                  onChange={(e) => {
+                    setNewGroceryListName(e.target.value);
+                    if (e.target.value) setSelectedGroceryListId('');
+                  }}
+                  placeholder="Enter list name..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+              
+              <div className="bg-gray-50 p-3 rounded-md">
+                <p className="text-sm text-gray-600 mb-2">
+                  This will add all {recipe.ingredients.length} ingredients from this recipe.
+                </p>
+                <p className="text-xs text-gray-500">
+                  Duplicate ingredients will be combined with existing quantities.
+                </p>
+              </div>
+              
+              <div className="flex gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowGroceryListModal(false);
+                    setSelectedGroceryListId('');
+                    setNewGroceryListName('');
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+                
+                <button
+                  type="submit"
+                  disabled={!selectedGroceryListId && !newGroceryListName.trim()}
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ShoppingCart size={16} className="mr-2" />
+                  Add Ingredients
+                </button>
+              </div>
+            </Form>
           </div>
         </div>
       )}

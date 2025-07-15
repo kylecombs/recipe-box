@@ -1,6 +1,6 @@
 import { json, LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData, Link } from "@remix-run/react";
-import { Plus } from "lucide-react";
+import { useLoaderData, Link, Form } from "@remix-run/react";
+import { Plus, ShoppingCart, LogOut } from "lucide-react";
 import { db } from "~/utils/db.server";
 import { requireUserId } from "~/utils/auth.server";
 import RecipeCard from "~/components/RecipeCard";
@@ -28,7 +28,14 @@ export default function RecipesIndex() {
       {/* Header */}
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold text-gray-900">My Recipes</h1>
-        <div className="flex gap-4">
+        <div className="flex gap-4 items-center">
+          <Link
+            to="/grocery-lists"
+            className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 flex items-center"
+          >
+            <ShoppingCart size={20} className="mr-2" />
+            Grocery Lists
+          </Link>
           <Link
             to="import"
             className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center"
@@ -43,6 +50,15 @@ export default function RecipesIndex() {
             <Plus size={20} className="mr-2" />
             Add Recipe
           </Link>
+          <Form method="post" action="/logout" className="inline">
+            <button
+              type="submit"
+              className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 flex items-center"
+            >
+              <LogOut size={20} className="mr-2" />
+              Logout
+            </button>
+          </Form>
         </div>
       </div>
 
