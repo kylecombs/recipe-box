@@ -22,9 +22,9 @@ model User {
 model Recipe {
   id              String           @id @default(uuid())
   title           String
-  description     String?
-  sourceUrl       String?
-  imageUrl        String?
+  description     String?          @db.Text
+  sourceUrl       String?          @db.Text
+  imageUrl        String?          @db.Text
   prepTime        Int? // In minutes
   cookTime        Int? // In minutes
   servings        Int?
@@ -33,6 +33,7 @@ model Recipe {
   ingredients     Ingredient[]
   instructions    Instruction[]
   tags            RecipeTag[]
+  notes           Note[]
   groceryListItems GroceryListItem[]
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
@@ -53,7 +54,7 @@ model Ingredient {
 model Instruction {
   id              String           @id @default(uuid())
   stepNumber      Int
-  description     String
+  description     String           @db.Text
   recipeId        String
   recipe          Recipe           @relation(fields: [recipeId], references: [id], onDelete: Cascade)
   createdAt       DateTime         @default(now())
@@ -93,6 +94,7 @@ model GroceryListItem {
   name            String
   quantity        String?
   unit            String?
+  notes           String?
   checked         Boolean          @default(false)
   recipeId        String?
   recipe          Recipe?          @relation(fields: [recipeId], references: [id], onDelete: SetNull)
@@ -100,4 +102,12 @@ model GroceryListItem {
   groceryList     GroceryList      @relation(fields: [groceryListId], references: [id], onDelete: Cascade)
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
+}
+
+model Note {
+  id              String           @id @default(uuid())
+  text            String           @db.Text
+  recipeId        String
+  recipe          Recipe           @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  createdAt       DateTime         @default(now())
 } 
