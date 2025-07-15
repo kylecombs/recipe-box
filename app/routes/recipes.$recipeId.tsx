@@ -882,7 +882,7 @@ export default function RecipeDetail() {
             {/* Ingredients */}
             <div className="lg:col-span-1">
               <div className="mb-4 space-y-4">
-                <IngredientsList ingredients={recipe.ingredients} />
+                <IngredientsList ingredients={recipe.ingredients} originalServings={recipe.servings} />
                   <button
                     onClick={() => setShowGroceryListModal(true)}
                     className="inline-flex items-center px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"
