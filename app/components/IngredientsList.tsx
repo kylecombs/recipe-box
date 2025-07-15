@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Scale, Loader2 } from "lucide-react";
+import { decimalToFraction } from "~/helpers/fractions";
 
 interface Ingredient {
   id: string;
@@ -46,21 +47,25 @@ export default function IngredientsList({ ingredients, originalServings = 1 }: I
     }
   };
 
+
   const scaleQuantity = (quantity: string, scaleFactor: number): string => {
     const numericValue = parseQuantity(quantity);
     const scaledValue = numericValue * scaleFactor;
     
-    // Round to 2 decimal places and remove trailing zeros
-    const rounded = Math.round(scaledValue * 100) / 100;
-    return rounded.toString().replace(/\.?0+$/, '');
+    return decimalToFraction(scaledValue);
+  };
+
+  const formatQuantity = (quantity: string): string => {
+    const numericValue = parseQuantity(quantity);
+    return decimalToFraction(numericValue);
   };
 
   const getScaledIngredients = (): ConvertedIngredient[] => {
     const scaleFactor = servings / originalServings;
     return convertedIngredients.map(ingredient => ({
       ...ingredient,
-      quantity: ingredient.quantity ? scaleQuantity(ingredient.quantity, scaleFactor) : ingredient.quantity,
-      convertedQuantity: ingredient.convertedQuantity ? scaleQuantity(ingredient.convertedQuantity, scaleFactor) : ingredient.convertedQuantity
+      quantity: ingredient.quantity ? (scaleFactor === 1 ? formatQuantity(ingredient.quantity) : scaleQuantity(ingredient.quantity, scaleFactor)) : ingredient.quantity,
+      convertedQuantity: ingredient.convertedQuantity ? (scaleFactor === 1 ? formatQuantity(ingredient.convertedQuantity) : scaleQuantity(ingredient.convertedQuantity, scaleFactor)) : ingredient.convertedQuantity
     }));
   };
 
