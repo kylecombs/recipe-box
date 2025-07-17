@@ -43,12 +43,10 @@ export async function parseRecipeFromUrl(url: string): Promise<RecipeData | null
     
     // Try to find JSON-LD structured data first (most reliable)
     const jsonLdScripts = document.querySelectorAll('script[type="application/ld+json"]');
-    console.log(`Found ${jsonLdScripts.length} JSON-LD scripts`);
     
     for (const jsonLdScript of jsonLdScripts) {
       try {
         const jsonData = JSON.parse(jsonLdScript.textContent || '');
-        console.log('JSON-LD data type:', Array.isArray(jsonData) ? 'array' : typeof jsonData);
         
         // Handle both single objects and arrays
         const items = Array.isArray(jsonData) ? jsonData : [jsonData];
@@ -64,21 +62,13 @@ export async function parseRecipeFromUrl(url: string): Promise<RecipeData | null
         );
           
         if (recipe) {
-          console.log('Found recipe in JSON-LD');
           const parsed = await parseJsonLdRecipe(recipe);
-          console.log('Parsed recipe:', {
-            title: parsed.title,
-            ingredientsCount: parsed.ingredients.length,
-            instructionsCount: parsed.instructions.length
-          });
           return parsed;
         }
       } catch (e) {
         console.warn('Failed to parse JSON-LD data:', e);
       }
     }
-    
-    console.log('No JSON-LD recipe found, falling back to microdata');
     // Fallback to microdata parsing
     return await parseMicrodataRecipe(document);
     
@@ -89,7 +79,6 @@ export async function parseRecipeFromUrl(url: string): Promise<RecipeData | null
 }
 
 async function parseJsonLdRecipe(recipe: Record<string, unknown>): Promise<RecipeData> {
-  console.log('Recipe properties:', Object.keys(recipe));
   
   // Collect all ingredient strings for batch parsing
   const ingredientTexts: string[] = [];
@@ -142,8 +131,6 @@ async function parseJsonLdRecipe(recipe: Record<string, unknown>): Promise<Recip
       return '';
     }).filter(Boolean);
   }
-  
-  console.log(`Found ${ingredients.length} ingredients and ${instructions.length} instructions`);
     
   return {
     title: decodeHtmlEntities((recipe.name as string) || 'Untitled Recipe'),

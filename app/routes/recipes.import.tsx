@@ -6,6 +6,7 @@ import { Link } from "lucide-react";
 import { db } from "~/utils/db.server";
 import { requireUserId } from "~/utils/auth.server";
 import { parseRecipeFromUrl } from "~/utils/recipe-parser.server";
+import { importRecipeWithVersioning, associateUserWithRecipe } from "~/utils/recipe-versioning.server";
 
 export const loader = async ({ request }) => {
   // Ensure user is authenticated
@@ -23,59 +24,22 @@ export const action = async ({ request }) => {
   }
   
   try {
-    // Parse recipe from URL
-    const recipeData = await parseRecipeFromUrl(url.toString());
+    // Import recipe with versioning support
+    const { recipe, isNewVersion } = await importRecipeWithVersioning(url.toString(), userId);
     
-    if (!recipeData) {
-      return json({ 
-        error: "Could not extract recipe information from this URL. Try a different URL or manual entry." 
-      }, { status: 400 });
-    }
+    // Associate the user with this recipe version
+    await associateUserWithRecipe(userId, recipe.id);
     
-    // Save recipe to database using Prisma
-    const recipe = await db.recipe.create({
-      data: {
-        title: recipeData.title,
-        description: recipeData.description,
-        sourceUrl: url.toString(),
-        imageUrl: recipeData.imageUrl,
-        prepTime: recipeData.prepTimeMinutes,
-        cookTime: recipeData.cookTimeMinutes,
-        servings: recipeData.servings,
-        userId: userId,
-        ingredients: {
-          create: recipeData.ingredients.map(ing => ({
-            name: ing.name,
-            quantity: ing.quantity,
-            unit: ing.unit,
-            notes: ing.notes
-          }))
-        },
-        instructions: {
-          create: recipeData.instructions.map((step, index) => ({
-            stepNumber: index + 1,
-            description: step
-          }))
-        },
-        tags: {
-          create: recipeData.tags.map(tagName => ({
-            tag: {
-              connectOrCreate: {
-                where: { name: tagName },
-                create: { name: tagName }
-              }
-            }
-          }))
-        }
-      }
-    });
+    // Redirect to the recipe page with a message about versioning
+    const redirectUrl = isNewVersion 
+      ? `/recipes/${recipe.id}?newVersion=true`
+      : `/recipes/${recipe.id}`;
     
-    // Redirect to the new recipe page
-    return redirect(`/recipes/${recipe.id}`);
+    return redirect(redirectUrl);
   } catch (error) {
     console.error("Error importing recipe:", error);
     return json({ 
-      error: "Failed to import recipe. Please try again or enter it manually." 
+      error: error.message || "Failed to import recipe. Please try again or enter it manually." 
     }, { status: 500 });
   }
 };

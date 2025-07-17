@@ -1,6 +1,6 @@
 import { json, LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData, Link, Form } from "@remix-run/react";
-import { Plus, ShoppingCart, LogOut } from "lucide-react";
+import { Plus, ShoppingCart, LogOut, Calendar } from "lucide-react";
 import { db } from "~/utils/db.server";
 import { requireUserId } from "~/utils/auth.server";
 import RecipeCard from "~/components/RecipeCard";
@@ -8,14 +8,23 @@ import RecipeCard from "~/components/RecipeCard";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const userId = await requireUserId(request);
 
-  const recipes = await db.recipe.findMany({
+  const userRecipes = await db.userRecipe.findMany({
     where: {
       userId: userId,
     },
+    include: {
+      recipe: true,
+    },
     orderBy: {
-      updatedAt: "desc",
+      importedAt: "desc",
     },
   });
+
+  const recipes = userRecipes.map(ur => ({
+    ...ur.recipe,
+    hasUpdates: ur.hasUpdates,
+    importedAt: ur.importedAt,
+  }));
 
   return json({ recipes });
 };
@@ -29,6 +38,13 @@ export default function RecipesIndex() {
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold text-gray-900">My Recipes</h1>
         <div className="flex gap-4 items-center">
+          <Link
+            to="/meal-plans"
+            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center"
+          >
+            <Calendar size={20} className="mr-2" />
+            Meal Plans
+          </Link>
           <Link
             to="/grocery-lists"
             className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 flex items-center"
@@ -96,6 +112,7 @@ export default function RecipesIndex() {
               prepTime={recipe.prepTime || undefined}
               cookTime={recipe.cookTime || undefined}
               servings={recipe.servings || undefined}
+              hasUpdates={recipe.hasUpdates}
             />
           ))}
         </div>

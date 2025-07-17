@@ -23,5 +23,15 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
 
+  meal-planner:
+    build: ./meal-planner-service
+    restart: always
+    ports:
+      - "8001:8001"
+    environment:
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - ./meal-planner-service/.env
+
 volumes:
   mysql_data: 

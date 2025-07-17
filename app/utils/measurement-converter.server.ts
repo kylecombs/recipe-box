@@ -152,15 +152,6 @@ export async function convertMeasurement(
     const normalizedFromUnit = UNIT_MAPPINGS[fromUnit.toLowerCase()] || fromUnit;
     const normalizedToUnit = UNIT_MAPPINGS[toUnit.toLowerCase()] || toUnit;
     
-    console.log('Conversion request:', {
-      ingredient,
-      fromUnit,
-      toUnit,
-      normalizedFromUnit,
-      normalizedToUnit,
-      value
-    });
-    
     // If units are the same after normalization, no conversion needed
     if (normalizedFromUnit === normalizedToUnit) {
       return { success: true, convertedValue: value, unit: toUnit };
@@ -189,8 +180,6 @@ export async function convertMeasurement(
     }
     
     const url = `https://food-ingredient-measurement-conversion.p.rapidapi.com/convert?${params}`;
-    
-    console.log('API request URL:', url);
     
     const response = await fetch(url, {
       method: 'GET',
