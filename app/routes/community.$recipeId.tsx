@@ -1,6 +1,6 @@
 import { json, type LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData, Link, Form, useFetcher } from "@remix-run/react";
-import { ArrowLeft, Clock, Users, Heart, Star, Globe, ChefHat } from "lucide-react";
+import { useLoaderData, Link, useFetcher } from "@remix-run/react";
+import { ArrowLeft, Clock, Users, Heart, Star, Globe } from "lucide-react";
 import { db } from "~/utils/db.server";
 import { requireUserId } from "~/utils/auth.server";
 import IngredientsList from "~/components/IngredientsList";
@@ -9,6 +9,8 @@ import TagsList from "~/components/TagsList";
 import StarRating from "~/components/StarRating";
 import RatingForm from "~/components/RatingForm";
 import Toast from "~/components/Toast";
+import TimerManager from "~/components/TimerManager";
+import { detectTimersFromRecipe } from "~/utils/time-parser";
 import { useState, useEffect } from "react";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
@@ -88,17 +90,27 @@ export default function CommunityRecipeDetail() {
   const [showErrorToast, setShowErrorToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
 
+  // Detect timers from recipe content
+  const detectedTimers = detectTimersFromRecipe(
+    recipe.title,
+    recipe.description || '',
+    recipe.instructionSteps.map(step => step.description),
+    recipe.prepTime || undefined,
+    recipe.cookTime || undefined
+  );
+
   // Handle fetcher state changes
   useEffect(() => {
     if (fetcher.state === 'idle' && fetcher.data) {
-      if (fetcher.data.success) {
+      const data = fetcher.data as { success?: boolean; message?: string; error?: string };
+      if (data.success) {
         setShowSuccessToast(true);
         setShowErrorToast(false);
-        setToastMessage(fetcher.data.message || "Action completed successfully!");
-      } else if (fetcher.data.error) {
+        setToastMessage(data.message || "Action completed successfully!");
+      } else if (data.error) {
         setShowErrorToast(true);
         setShowSuccessToast(false);
-        setToastMessage(fetcher.data.error);
+        setToastMessage(data.error);
       }
     }
   }, [fetcher.state, fetcher.data]);
@@ -233,7 +245,7 @@ export default function CommunityRecipeDetail() {
                         </button>
                       </div>
                       {userRating.comment && (
-                        <p className="text-sm text-gray-600 italic">"{userRating.comment}"</p>
+                        <p className="text-sm text-gray-600 italic">&quot;{userRating.comment}&quot;</p>
                       )}
                     </div>
                   ) : (
@@ -292,11 +304,16 @@ export default function CommunityRecipeDetail() {
         </div>
       </div>
 
+      {/* Timers */}
+      {detectedTimers.length > 0 && (
+        <TimerManager timers={detectedTimers} recipeId={recipe.id} />
+      )}
+
       {/* Recipe Content */}
       <div className="grid lg:grid-cols-3 gap-8">
         {/* Ingredients */}
         <div className="lg:col-span-1">
-          <IngredientsList ingredients={recipe.ingredients} originalServings={recipe.servings} />
+          <IngredientsList ingredients={recipe.ingredients} originalServings={recipe.servings || 0} />
         </div>
         
         {/* Instructions */}
