@@ -48,9 +48,9 @@ export async function extractTextFromImage(imageBuffer: Buffer): Promise<Process
 }
 
 /**
- * Parse recipe data from extracted text
+ * Parse recipe data from extracted text (internal helper)
  */
-function parseRecipeFromText(text: string): ExtractedRecipeData {
+function parseRecipeDataFromRawText(text: string): ExtractedRecipeData {
   const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
   
   const recipe: ExtractedRecipeData = {
@@ -112,33 +112,51 @@ function parseRecipeFromText(text: string): ExtractedRecipeData {
           currentSection = 'none';
           // Choose the most likely title (usually the first or longest)
           recipe.title = titleCandidates[0] || 'Untitled Recipe';
-          // Second line might be description
-          if (titleCandidates[1]) {
-            recipe.description = titleCandidates[1];
+          // Look for description in remaining title candidates
+          if (titleCandidates.length > 1) {
+            // Skip very short lines that are likely not descriptions
+            const descriptionCandidates = titleCandidates.slice(1).filter(t => t.length > 20);
+            if (descriptionCandidates.length > 0) {
+              recipe.description = descriptionCandidates[0];
+            }
           }
         }
         break;
         
       case 'ingredients':
         // Look for ingredient patterns
-        if (line.match(/^[\d\s���ST[\]^/]+/) || // Starts with numbers or fractions
+        if (line.match(/^[-•*]\s*/) || // Starts with bullet points
+            line.match(/^[\d\s¼½¾⅓⅔⅛⅜⅝⅞/]+/) || // Starts with numbers or fractions
             line.match(/^(one|two|three|four|five|six|seven|eight|nine|ten)\s/i) || // Starts with number words
             line.includes('cup') || line.includes('tbsp') || line.includes('tsp') ||
-            line.includes('oz') || line.includes('pound') || line.includes('gram')) {
-          recipe.ingredients.push(line);
+            line.includes('oz') || line.includes('pound') || line.includes('gram') ||
+            line.includes('ml') || line.includes('liter') || line.includes('kg') ||
+            line.match(/\d+\s*(cup|tbsp|tsp|oz|lb|pound|gram|ml|liter|kg|clove|bunch)/i)) {
+          // Clean up bullet points and extra whitespace
+          const cleanedLine = line.replace(/^[-•*]\s*/, '').trim();
+          if (cleanedLine) {
+            recipe.ingredients.push(cleanedLine);
+          }
         } else if (instructionHeaders.test(line)) {
           currentSection = 'instructions';
+        } else if (line.length > 10 && !line.match(/^(serves?|servings?|prep|cook|total)/i)) {
+          // Assume it's an ingredient if it's substantial and not clearly something else
+          recipe.ingredients.push(line);
         }
         break;
         
       case 'instructions':
         // Look for instruction patterns
-        if (line.match(/^(step\s*)?\d+[.):]?\s*/i) || // Numbered steps
+        if (line.match(/^[-•*]\s*/) || // Starts with bullet points
+            line.match(/^(step\s*)?\d+[.):]?\s*/i) || // Numbered steps
             line.match(/^[a-z]\.\s*/i) || // Lettered steps
-            line.length > 20) { // Longer lines are likely instructions
-          // Remove step numbers if present
-          const cleanedLine = line.replace(/^(step\s*)?\d+[.):]?\s*/i, '').trim();
-          if (cleanedLine) {
+            line.length > 15) { // Substantial lines are likely instructions
+          // Remove step numbers and bullet points if present
+          let cleanedLine = line.replace(/^[-•*]\s*/, '').trim();
+          cleanedLine = cleanedLine.replace(/^(step\s*)?\d+[.):]?\s*/i, '').trim();
+          cleanedLine = cleanedLine.replace(/^[a-z]\.\s*/i, '').trim();
+          
+          if (cleanedLine && cleanedLine.length > 5) {
             recipe.instructions.push(cleanedLine);
           }
         }
@@ -155,6 +173,38 @@ function parseRecipeFromText(text: string): ExtractedRecipeData {
 }
 
 /**
+ * Parse recipe data from text directly (for copy-paste functionality)
+ */
+export async function parseRecipeFromText(text: string): Promise<RecipeData> {
+  // Parse recipe from the provided text
+  const extractedData = parseRecipeDataFromRawText(text);
+  
+  // Parse ingredients using the NLP service
+  const parsedIngredients = extractedData.ingredients.length > 0
+    ? await parseIngredientsBatch(extractedData.ingredients)
+    : [];
+  
+  // Convert to RecipeData format
+  const recipeData: RecipeData = {
+    title: extractedData.title,
+    description: extractedData.description,
+    servings: extractedData.servings,
+    prepTimeMinutes: parseTimeToMinutes(extractedData.prepTime),
+    cookTimeMinutes: parseTimeToMinutes(extractedData.cookTime),
+    ingredients: parsedIngredients.map(ing => ({
+      name: ing.name,
+      quantity: ing.quantity || undefined,
+      unit: ing.unit || undefined,
+      notes: ing.comment || undefined,
+    })),
+    instructions: extractedData.instructions,
+    tags: generateTagsFromRecipe(extractedData),
+  };
+  
+  return recipeData;
+}
+
+/**
  * Process a recipe image and extract recipe data
  */
 export async function parseRecipeFromImage(imageBuffer: Buffer): Promise<RecipeData> {
@@ -166,7 +216,7 @@ export async function parseRecipeFromImage(imageBuffer: Buffer): Promise<RecipeD
   }
   
   // Parse recipe from extracted text
-  const extractedData = parseRecipeFromText(text);
+  const extractedData = parseRecipeDataFromRawText(text);
   
   // Parse ingredients using the NLP service
   const parsedIngredients = extractedData.ingredients.length > 0
