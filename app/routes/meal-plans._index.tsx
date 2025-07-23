@@ -3,16 +3,29 @@ import { useLoaderData, Link } from "@remix-run/react";
 import { Calendar, ChevronRight, Edit, Bot, ChefHat } from "lucide-react";
 import { requireUserId } from "~/utils/auth.server";
 import { db } from "~/utils/db.server";
+import StarRating from "~/components/StarRating";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const userId = await requireUserId(request);
   
   const mealPlans = await db.mealPlan.findMany({
     where: { userId },
+    include: {
+      ratings: {
+        where: { userId },
+        select: { rating: true, comment: true },
+      },
+    },
     orderBy: { createdAt: "desc" },
   });
+
+  // Add user rating to each meal plan
+  const mealPlansWithRatings = mealPlans.map(plan => ({
+    ...plan,
+    userRating: plan.ratings[0] || null,
+  }));
   
-  return json({ mealPlans });
+  return json({ mealPlans: mealPlansWithRatings });
 }
 
 export default function MealPlans() {
@@ -85,6 +98,12 @@ export default function MealPlans() {
                   <span>{plan.days} days</span>
                   <span>{new Date(plan.createdAt).toLocaleDateString()}</span>
                 </div>
+                {plan.userRating && (
+                  <div className="flex items-center mb-3">
+                    <StarRating rating={plan.userRating.rating} readonly size={14} />
+                    <span className="ml-2 text-xs text-gray-500">Your rating</span>
+                  </div>
+                )}
               </Link>
               <div className="flex justify-between items-center">
                 <Link

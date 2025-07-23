@@ -8,16 +8,18 @@ datasource db {
 }
 
 model User {
-  id           String        @id @default(uuid())
-  email        String        @unique
-  name         String?
-  password     String
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  groceryLists GroceryList[]
-  mealPlans    MealPlan[]
-  recipes      Recipe[]
-  userRecipes  UserRecipe[]
+  id              String           @id @default(uuid())
+  email           String           @unique
+  name            String?
+  password        String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  groceryLists    GroceryList[]
+  mealPlans       MealPlan[]
+  mealPlanRatings MealPlanRating[]
+  recipes         Recipe[]
+  recipeRatings   RecipeRating[]
+  userRecipes     UserRecipe[]
 }
 
 model Recipe {
@@ -40,6 +42,7 @@ model Recipe {
   instructionSteps Instruction[]
   notes            Note[]
   parent           Recipe?           @relation("RecipeVersions", fields: [parentId], references: [id])
+  ratings          RecipeRating[]
   versions         Recipe[]          @relation("RecipeVersions")
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   tags             RecipeTag[]
@@ -137,17 +140,18 @@ model Note {
 }
 
 model MealPlan {
-  id           String   @id @default(uuid())
+  id           String           @id @default(uuid())
   name         String
-  description  String?  @db.Text
+  description  String?          @db.Text
   days         Int
   weekPlan     Json
   shoppingList Json
-  notes        String?  @db.Text
+  notes        String?          @db.Text
   userId       String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  ratings      MealPlanRating[]
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId], map: "MealPlan_userId_fkey")
 }
@@ -163,4 +167,36 @@ model UserRecipe {
 
   @@unique([userId, recipeId])
   @@index([recipeId], map: "UserRecipe_recipeId_fkey")
+}
+
+model RecipeRating {
+  id        String   @id @default(uuid())
+  rating    Int      // 1-5 star rating
+  comment   String?  @db.Text
+  userId    String
+  recipeId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  recipe    Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, recipeId])
+  @@index([recipeId], map: "RecipeRating_recipeId_fkey")
+  @@index([userId], map: "RecipeRating_userId_fkey")
+}
+
+model MealPlanRating {
+  id         String   @id @default(uuid())
+  rating     Int      // 1-5 star rating
+  comment    String?  @db.Text
+  userId     String
+  mealPlanId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  mealPlan   MealPlan @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mealPlanId])
+  @@index([mealPlanId], map: "MealPlanRating_mealPlanId_fkey")
+  @@index([userId], map: "MealPlanRating_userId_fkey")
 }

@@ -1,6 +1,6 @@
 import { json, LoaderFunctionArgs, ActionFunctionArgs, redirect } from "@remix-run/node";
 import { useLoaderData, Link, Form, useActionData, useNavigation } from "@remix-run/react";
-import { ArrowLeft, Clock, Users, ExternalLink, Edit2, Save, X, Plus, Trash2, Upload, StickyNote, AlertTriangle, ShoppingCart } from "lucide-react";
+import { ArrowLeft, Clock, Users, ExternalLink, Edit2, Save, X, Plus, Trash2, Upload, StickyNote, AlertTriangle, ShoppingCart, Star } from "lucide-react";
 import { useState, useEffect } from "react";
 import { db } from "~/utils/db.server";
 import { requireUserId } from "~/utils/auth.server";
@@ -10,6 +10,8 @@ import InstructionsList from "~/components/InstructionsList";
 import TagsList from "~/components/TagsList";
 import Toast from "~/components/Toast";
 import GroceryListModal from "~/components/GroceryListModal";
+import StarRating from "~/components/StarRating";
+import RatingForm from "~/components/RatingForm";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const userId = await requireUserId(request);
@@ -62,7 +64,24 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     orderBy: { createdAt: 'desc' }
   });
 
-  return json({ recipe, groceryLists, notes });
+  // Fetch user's rating for this recipe
+  const userRating = await db.recipeRating.findUnique({
+    where: {
+      userId_recipeId: {
+        userId,
+        recipeId,
+      },
+    },
+  });
+
+  // Fetch average rating and total ratings
+  const ratingStats = await db.recipeRating.aggregate({
+    where: { recipeId },
+    _avg: { rating: true },
+    _count: { rating: true },
+  });
+
+  return json({ recipe, groceryLists, notes, userRating, ratingStats });
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
@@ -407,7 +426,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 };
 
 export default function RecipeDetail() {
-  const { recipe, groceryLists, notes } = useLoaderData<typeof loader>();
+  const { recipe, groceryLists, notes, userRating, ratingStats } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const [isEditing, setIsEditing] = useState(false);
@@ -423,6 +442,7 @@ export default function RecipeDetail() {
   const [showGroceryListModal, setShowGroceryListModal] = useState(false);
   const [selectedGroceryListId, setSelectedGroceryListId] = useState<string>('');
   const [newGroceryListName, setNewGroceryListName] = useState('');
+  const [showRatingForm, setShowRatingForm] = useState(false);
 
   // Handle action responses
   useEffect(() => {
@@ -879,6 +899,71 @@ export default function RecipeDetail() {
               {recipe.tags.length > 0 && (
                 <TagsList tags={recipe.tags.map(rt => rt.tag.name)} />
               )}
+              
+              {/* Rating Section */}
+              <div className="mt-6 pt-6 border-t border-gray-200">
+                <div className="flex flex-col space-y-3">
+                  {/* Average Rating Display */}
+                  {ratingStats._count.rating > 0 && (
+                    <div className="flex items-center space-x-3">
+                      <StarRating 
+                        rating={Math.round(ratingStats._avg.rating || 0)} 
+                        readonly 
+                        size={18}
+                      />
+                      <span className="text-sm text-gray-600">
+                        {(ratingStats._avg.rating || 0).toFixed(1)} 
+                        ({ratingStats._count.rating} rating{ratingStats._count.rating !== 1 ? 's' : ''})
+                      </span>
+                    </div>
+                  )}
+                  
+                  {/* User's Rating */}
+                  <div>
+                    {userRating ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-sm font-medium text-gray-700">Your rating:</span>
+                            <StarRating rating={userRating.rating} readonly size={16} />
+                          </div>
+                          <button
+                            onClick={() => setShowRatingForm(true)}
+                            className="text-xs text-blue-600 hover:text-blue-700"
+                          >
+                            Edit
+                          </button>
+                        </div>
+                        {userRating.comment && (
+                          <p className="text-sm text-gray-600 italic">"{userRating.comment}"</p>
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setShowRatingForm(true)}
+                        className="inline-flex items-center space-x-2 text-sm text-blue-600 hover:text-blue-700"
+                      >
+                        <Star size={16} />
+                        <span>Rate this recipe</span>
+                      </button>
+                    )}
+                  </div>
+                  
+                  {/* Rating Form */}
+                  {showRatingForm && (
+                    <div className="mt-4">
+                      <RatingForm
+                        itemId={recipe.id}
+                        itemType="recipe"
+                        currentRating={userRating?.rating || 0}
+                        currentComment={userRating?.comment || ""}
+                        onClose={() => setShowRatingForm(false)}
+                        compact
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}
