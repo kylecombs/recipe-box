@@ -13,7 +13,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       userId: userId,
     },
     include: {
-      recipe: true,
+      recipe: {
+        include: {
+          ratings: {
+            where: { userId },
+            select: { rating: true, comment: true },
+          },
+        },
+      },
     },
     orderBy: {
       importedAt: "desc",
@@ -24,6 +31,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ...ur.recipe,
     hasUpdates: ur.hasUpdates,
     importedAt: ur.importedAt,
+    userRating: ur.recipe.ratings[0] || null,
   }));
 
   return json({ recipes });
@@ -113,6 +121,7 @@ export default function RecipesIndex() {
               cookTime={recipe.cookTime || undefined}
               servings={recipe.servings || undefined}
               hasUpdates={recipe.hasUpdates}
+              userRating={recipe.userRating}
             />
           ))}
         </div>

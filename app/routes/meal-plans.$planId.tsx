@@ -1,11 +1,13 @@
 import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
 import { useLoaderData, Link, useFetcher } from "@remix-run/react";
-import { ArrowLeft, ShoppingCart, Edit } from "lucide-react";
+import { ArrowLeft, ShoppingCart, Edit, Star } from "lucide-react";
 import { requireUserId } from "~/utils/auth.server";
 import { db } from "~/utils/db.server";
 import { areIngredientsEqual, combineQuantities } from "~/utils/ingredient-matcher.server";
 import GroceryListModal from "~/components/GroceryListModal";
 import Toast from "~/components/Toast";
+import StarRating from "~/components/StarRating";
+import RatingForm from "~/components/RatingForm";
 import { useState, useEffect } from "react";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
@@ -28,8 +30,25 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     where: { userId },
     orderBy: { createdAt: "desc" },
   });
+
+  // Fetch user's rating for this meal plan
+  const userRating = await db.mealPlanRating.findUnique({
+    where: {
+      userId_mealPlanId: {
+        userId,
+        mealPlanId: planId!,
+      },
+    },
+  });
+
+  // Fetch average rating and total ratings (for meal plans, only user's own rating matters since they're private to the user)
+  const ratingStats = await db.mealPlanRating.aggregate({
+    where: { mealPlanId: planId! },
+    _avg: { rating: true },
+    _count: { rating: true },
+  });
   
-  return json({ mealPlan, groceryLists });
+  return json({ mealPlan, groceryLists, userRating, ratingStats });
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
@@ -130,7 +149,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 }
 
 export default function MealPlanDetail() {
-  const { mealPlan, groceryLists } = useLoaderData<typeof loader>();
+  const { mealPlan, groceryLists, userRating, ratingStats } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const [showGroceryListModal, setShowGroceryListModal] = useState(false);
   const [selectedGroceryListId, setSelectedGroceryListId] = useState("");
@@ -138,6 +157,7 @@ export default function MealPlanDetail() {
   const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [showErrorToast, setShowErrorToast] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [showRatingForm, setShowRatingForm] = useState(false);
   
   // Parse the JSON fields
   const weekPlan = mealPlan.weekPlan as any[];
@@ -182,6 +202,54 @@ export default function MealPlanDetail() {
             <p className="text-sm text-gray-500 mt-1">
               Created on {new Date(mealPlan.createdAt).toLocaleDateString()}
             </p>
+            
+            {/* Rating Section */}
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <div className="flex flex-col space-y-2">
+                {/* User's Rating */}
+                {userRating ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-sm font-medium text-gray-700">Your rating:</span>
+                        <StarRating rating={userRating.rating} readonly size={16} />
+                      </div>
+                      <button
+                        onClick={() => setShowRatingForm(true)}
+                        className="text-xs text-blue-600 hover:text-blue-700"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                    {userRating.comment && (
+                      <p className="text-sm text-gray-600 italic">"{userRating.comment}"</p>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowRatingForm(true)}
+                    className="inline-flex items-center space-x-2 text-sm text-blue-600 hover:text-blue-700"
+                  >
+                    <Star size={16} />
+                    <span>Rate this meal plan</span>
+                  </button>
+                )}
+                
+                {/* Rating Form */}
+                {showRatingForm && (
+                  <div className="mt-4">
+                    <RatingForm
+                      itemId={mealPlan.id}
+                      itemType="mealplan"
+                      currentRating={userRating?.rating || 0}
+                      currentComment={userRating?.comment || ""}
+                      onClose={() => setShowRatingForm(false)}
+                      compact
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
           <Link
             to={`/meal-plans/edit/${mealPlan.id}`}
