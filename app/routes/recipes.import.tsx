@@ -2,10 +2,10 @@
 import { json, redirect } from "@remix-run/node";
 import { Form, useActionData, useNavigation } from "@remix-run/react";
 import { useState, useCallback } from "react";
-import { Link, Camera } from "lucide-react";
+import { Link, Camera, FileText } from "lucide-react";
 import { db } from "~/utils/db.server";
 import { requireUserId } from "~/utils/auth.server";
-import { parseRecipeFromImage, validateImageBuffer } from "~/utils/image-processor.server";
+import { parseRecipeFromImage, parseRecipeFromText, validateImageBuffer } from "~/utils/image-processor.server";
 import { importRecipeWithVersioning, associateUserWithRecipe } from "~/utils/recipe-versioning.server";
 
 import type { LoaderFunction, ActionFunction } from "@remix-run/node";
@@ -21,6 +21,7 @@ export const action: ActionFunction = async ({ request }) => {
   const formData = await request.formData();
   const url = formData.get("url");
   const imageFile = formData.get("image") as File;
+  const recipeText = formData.get("recipeText");
   
   // Handle URL import
   if (url) {
@@ -125,7 +126,67 @@ export const action: ActionFunction = async ({ request }) => {
     }
   }
   
-  return json({ error: "Please provide either a URL or an image" }, { status: 400 });
+  // Handle text import
+  if (recipeText && typeof recipeText === 'string' && recipeText.trim()) {
+    try {
+      // Process the text and extract recipe data
+      const recipeData = await parseRecipeFromText(recipeText.trim());
+      
+      // Create the recipe in the database
+      const recipe = await db.recipe.create({
+        data: {
+          title: recipeData.title,
+          description: recipeData.description,
+          imageUrl: recipeData.imageUrl,
+          prepTime: recipeData.prepTimeMinutes,
+          cookTime: recipeData.cookTimeMinutes,
+          servings: recipeData.servings,
+          sourceUrl: null,
+          instructions: recipeData.instructions.join('\n'),
+          userId,
+          version: 1,
+          ingredients: {
+            create: recipeData.ingredients.map((ing) => ({
+              name: ing.name,
+              quantity: ing.quantity,
+              unit: ing.unit,
+              notes: ing.notes,
+            })),
+          },
+          instructionSteps: {
+            create: recipeData.instructions.map((instruction, index) => ({
+              stepNumber: index + 1,
+              description: instruction,
+            })),
+          },
+          tags: {
+            create: recipeData.tags.map(tagName => ({
+              tag: {
+                connectOrCreate: {
+                  where: { name: tagName },
+                  create: { name: tagName }
+                }
+              }
+            })),
+          },
+          userRecipes: {
+            create: {
+              userId,
+            },
+          },
+        },
+      });
+      
+      return redirect(`/recipes/${recipe.id}`);
+    } catch (error) {
+      console.error("Error parsing recipe from text:", error);
+      return json({ 
+        error: "Failed to parse recipe from text. Please check the format and try again." 
+      }, { status: 500 });
+    }
+  }
+  
+  return json({ error: "Please provide a URL, image, or recipe text" }, { status: 400 });
 };
 
 type ActionData = {
@@ -137,9 +198,10 @@ export default function ImportRecipe() {
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
   const [url, setUrl] = useState("");
-  const [importMethod, setImportMethod] = useState<"url" | "image">("url");
+  const [importMethod, setImportMethod] = useState<"url" | "image" | "text">("url");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [recipeText, setRecipeText] = useState("");
   
   const handleFileSelect = useCallback((file: File) => {
     setSelectedFile(file);
@@ -181,6 +243,18 @@ export default function ImportRecipe() {
         >
           <Camera size={20} className="inline-block mb-1" />
           <div>From Image</div>
+        </button>
+        <button
+          type="button"
+          onClick={() => setImportMethod("text")}
+          className={`flex-1 py-2 px-4 text-center ${
+            importMethod === "text"
+              ? "border-b-2 border-blue-600 text-blue-600"
+              : "text-gray-600 hover:text-gray-800"
+          }`}
+        >
+          <FileText size={20} className="inline-block mb-1" />
+          <div>From Text</div>
         </button>
       </div>
       
@@ -227,7 +301,7 @@ export default function ImportRecipe() {
             </span>
           </div>
         </Form>
-      ) : (
+      ) : importMethod === "image" ? (
         <Form method="post" encType="multipart/form-data" className="space-y-6">
           <div>
             <label htmlFor="image-input" className="block text-sm font-medium text-gray-700 mb-1">
@@ -277,6 +351,68 @@ export default function ImportRecipe() {
             <Camera size={16} />
             <span>
               Best results with clear, well-lit photos of recipe text
+            </span>
+          </div>
+        </Form>
+      ) : (
+        <Form method="post" className="space-y-6">
+          <div>
+            <label htmlFor="recipe-text" className="block text-sm font-medium text-gray-700 mb-1">
+              Recipe Text
+            </label>
+            <textarea
+              id="recipe-text"
+              name="recipeText"
+              required
+              rows={12}
+              placeholder="Paste your recipe here...
+
+Example format:
+Chocolate Chip Cookies
+Prep: 15 min, Bake: 12 min, Serves: 24
+
+Ingredients:
+- 2 1/4 cups all-purpose flour
+- 1 tsp baking soda
+- 1 cup butter, softened
+- 3/4 cup sugar
+- 2 eggs
+- 2 cups chocolate chips
+
+Instructions:
+1. Preheat oven to 375°F
+2. Mix flour and baking soda in bowl
+3. Cream butter and sugar, add eggs
+4. Combine wet and dry ingredients
+5. Stir in chocolate chips
+6. Bake 9-11 minutes"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 resize-vertical"
+              value={recipeText}
+              onChange={(e) => setRecipeText(e.target.value)}
+            />
+            <p className="mt-2 text-sm text-gray-500">
+              Paste recipe text from any source - we&apos;ll parse the ingredients and instructions automatically
+            </p>
+          </div>
+          
+          <button 
+            type="submit"
+            disabled={isSubmitting || !recipeText.trim()}
+            className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+          >
+            {isSubmitting ? "Processing Text..." : "Parse Recipe"}
+          </button>
+          
+          {actionData?.error && (
+            <div className="text-red-600 text-sm">
+              {actionData.error}
+            </div>
+          )}
+          
+          <div className="flex items-center space-x-2 text-sm text-gray-500">
+            <FileText size={16} />
+            <span>
+              Works with recipes copied from websites, cookbooks, or handwritten notes
             </span>
           </div>
         </Form>
