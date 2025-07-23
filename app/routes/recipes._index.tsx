@@ -1,9 +1,10 @@
 import { json, LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData, Link, Form } from "@remix-run/react";
-import { Plus, ShoppingCart, LogOut, Calendar } from "lucide-react";
+import { Plus, ShoppingCart, LogOut, Calendar, Users } from "lucide-react";
 import { db } from "~/utils/db.server";
 import { requireUserId } from "~/utils/auth.server";
 import RecipeCard from "~/components/RecipeCard";
+import PopularRecipesCarousel from "~/components/PopularRecipesCarousel";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const userId = await requireUserId(request);
@@ -34,11 +35,43 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     userRating: ur.recipe.ratings[0] || null,
   }));
 
-  return json({ recipes });
+  // Fetch popular public recipes for carousel
+  const popularRecipes = await db.recipe.findMany({
+    where: {
+      isPublic: true,
+      saveCount: { gt: 0 }, // Only show recipes that have been saved
+    },
+    include: {
+      user: {
+        select: { name: true, email: true },
+      },
+      ratings: {
+        select: { rating: true },
+      },
+      userRecipes: {
+        where: { userId },
+        select: { id: true },
+      },
+    },
+    orderBy: { saveCount: "desc" },
+    take: 9, // 3 pages of 3 recipes each
+  });
+
+  // Calculate average ratings and add computed fields for popular recipes
+  const popularRecipesWithStats = popularRecipes.map(recipe => ({
+    ...recipe,
+    averageRating: recipe.ratings.length > 0 
+      ? recipe.ratings.reduce((sum, r) => sum + r.rating, 0) / recipe.ratings.length 
+      : 0,
+    ratingCount: recipe.ratings.length,
+    isUserSaved: recipe.userRecipes.length > 0,
+  }));
+
+  return json({ recipes, popularRecipes: popularRecipesWithStats });
 };
 
 export default function RecipesIndex() {
-  const { recipes } = useLoaderData<typeof loader>();
+  const { recipes, popularRecipes } = useLoaderData<typeof loader>();
 
   return (
     <div className="max-w-6xl mx-auto p-6">
@@ -46,6 +79,13 @@ export default function RecipesIndex() {
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold text-gray-900">My Recipes</h1>
         <div className="flex gap-4 items-center">
+          <Link
+            to="/community"
+            className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 flex items-center"
+          >
+            <Users size={20} className="mr-2" />
+            Community
+          </Link>
           <Link
             to="/meal-plans"
             className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center"
@@ -85,6 +125,15 @@ export default function RecipesIndex() {
           </Form>
         </div>
       </div>
+
+      {/* Popular Recipes Carousel */}
+      {popularRecipes.length > 0 && (
+        <PopularRecipesCarousel 
+          recipes={popularRecipes} 
+          title="Popular Community Recipes"
+          showSaveButton={true}
+        />
+      )}
 
       {/* Recipes Grid */}
       {recipes.length === 0 ? (
