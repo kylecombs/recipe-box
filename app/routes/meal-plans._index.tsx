@@ -1,6 +1,6 @@
 import { json, type LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData, Link } from "@remix-run/react";
-import { Calendar, ChevronRight, Edit } from "lucide-react";
+import { Calendar, ChevronRight, Edit, Bot, ChefHat } from "lucide-react";
 import { requireUserId } from "~/utils/auth.server";
 import { db } from "~/utils/db.server";
 
@@ -22,12 +22,22 @@ export default function MealPlans() {
     <div className="max-w-6xl mx-auto p-6">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">Saved Meal Plans</h1>
-        <Link
-          to="/meal-plan"
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
-          Create New Plan
-        </Link>
+        <div className="flex gap-3">
+          <Link
+            to="/meal-plans/new"
+            className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+          >
+            <ChefHat size={16} className="mr-2" />
+            Create Manually
+          </Link>
+          <Link
+            to="/meal-plan"
+            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            <Bot size={16} className="mr-2" />
+            Generate with AI
+          </Link>
+        </div>
       </div>
       
       {mealPlans.length === 0 ? (
@@ -37,12 +47,22 @@ export default function MealPlans() {
           <p className="text-gray-500 mb-6">
             Create your first meal plan to organize your weekly meals.
           </p>
-          <Link
-            to="/meal-plan"
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700"
-          >
-            Create Meal Plan
-          </Link>
+          <div className="flex justify-center gap-4">
+            <Link
+              to="/meal-plans/new"
+              className="inline-flex items-center bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700"
+            >
+              <ChefHat size={20} className="mr-2" />
+              Create Manually
+            </Link>
+            <Link
+              to="/meal-plan"
+              className="inline-flex items-center bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700"
+            >
+              <Bot size={20} className="mr-2" />
+              Generate with AI
+            </Link>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
