@@ -12,6 +12,8 @@ import Toast from "~/components/Toast";
 import GroceryListModal from "~/components/GroceryListModal";
 import StarRating from "~/components/StarRating";
 import RatingForm from "~/components/RatingForm";
+import TimerManager from "~/components/TimerManager";
+import { detectTimersFromRecipe } from "~/utils/time-parser";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const userId = await requireUserId(request);
@@ -59,7 +61,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   });
 
   // Fetch notes separately
-  const notes = await (db as any).note.findMany({
+  const notes = await db.note.findMany({
     where: { recipeId },
     orderBy: { createdAt: 'desc' }
   });
@@ -117,7 +119,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       }
 
       // Add new note using Prisma
-      await (db as any).note.create({
+      await db.note.create({
         data: {
           text: noteText.trim(),
           recipeId: recipeId
@@ -149,7 +151,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       }
 
       // Remove the note using Prisma
-      await (db as any).note.delete({
+      await db.note.delete({
         where: { id: noteId }
       });
 
@@ -398,7 +400,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
             quantity: ing.quantity,
             unit: ing.unit,
             notes: ing.notes,
-            original: ing.original || `${ing.quantity || ''} ${ing.unit || ''} ${ing.name}`.trim(),
+            original: 'original' in ing ? ing.original as string : `${ing.quantity || ''} ${ing.unit || ''} ${ing.name}`.trim(),
             recipeId: recipeId
           }))
         });
@@ -476,6 +478,15 @@ export default function RecipeDetail() {
   const [newGroceryListName, setNewGroceryListName] = useState('');
   const [showRatingForm, setShowRatingForm] = useState(false);
 
+  // Detect timers from recipe content
+  const detectedTimers = detectTimersFromRecipe(
+    recipe.title,
+    recipe.description || '',
+    recipe.instructionSteps.map(step => step.description),
+    recipe.prepTime || undefined,
+    recipe.cookTime || undefined
+  );
+
   // Handle action responses
   useEffect(() => {
     if (actionData && !isSubmitting) {
@@ -521,6 +532,7 @@ export default function RecipeDetail() {
       quantity: null,
       unit: null,
       notes: null,
+      original: '',
       recipeId: recipe.id,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -571,6 +583,7 @@ export default function RecipeDetail() {
         <Toast
           message={toast.message}
           type={toast.type}
+          show={!!toast.message}
           onClose={() => setToast(null)}
         />
       )}
@@ -1005,7 +1018,7 @@ export default function RecipeDetail() {
                           </button>
                         </div>
                         {userRating.comment && (
-                          <p className="text-sm text-gray-600 italic">"{userRating.comment}"</p>
+                          <p className="text-sm text-gray-600 italic">&quot;{userRating.comment}&quot;</p>
                         )}
                       </div>
                     ) : (
@@ -1039,6 +1052,11 @@ export default function RecipeDetail() {
         )}
       </div>
 
+      {/* Timers - Only show when not editing */}
+      {!isEditing && detectedTimers.length > 0 && (
+        <TimerManager timers={detectedTimers} recipeId={recipe.id} />
+      )}
+
       {/* Recipe Content - Only show when not editing */}
       {!isEditing && (
         <>
@@ -1046,7 +1064,7 @@ export default function RecipeDetail() {
             {/* Ingredients */}
             <div className="lg:col-span-1">
               <div className="mb-4 space-y-4">
-                <IngredientsList ingredients={recipe.ingredients} originalServings={recipe.servings} />
+                <IngredientsList ingredients={recipe.ingredients} originalServings={recipe.servings || undefined} />
                   <button
                     onClick={() => setShowGroceryListModal(true)}
                     className="inline-flex items-center px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"
@@ -1113,7 +1131,7 @@ export default function RecipeDetail() {
             {/* Notes List */}
             {notes && notes.length > 0 ? (
               <div className="space-y-3">
-                {notes.map((note: any) => (
+                {notes.map((note) => (
                     <div key={note.id} className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                       <div className="flex justify-between items-start gap-3">
                         <div className="flex-1">
