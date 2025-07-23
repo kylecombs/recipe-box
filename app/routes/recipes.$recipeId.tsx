@@ -1,6 +1,6 @@
 import { json, LoaderFunctionArgs, ActionFunctionArgs, redirect } from "@remix-run/node";
 import { useLoaderData, Link, Form, useActionData, useNavigation } from "@remix-run/react";
-import { ArrowLeft, Clock, Users, ExternalLink, Edit2, Save, X, Plus, Trash2, Upload, StickyNote, AlertTriangle, ShoppingCart, Star } from "lucide-react";
+import { ArrowLeft, Clock, Users, ExternalLink, Edit2, Save, X, Plus, Trash2, Upload, StickyNote, AlertTriangle, ShoppingCart, Star, Globe, Lock } from "lucide-react";
 import { useState, useEffect } from "react";
 import { db } from "~/utils/db.server";
 import { requireUserId } from "~/utils/auth.server";
@@ -421,6 +421,38 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       return json({ error: "Failed to update recipe" }, { status: 500 });
     }
   }
+  
+  if (intent === "togglePublic") {
+    try {
+      const existingRecipe = await db.recipe.findFirst({
+        where: { id: recipeId, userId },
+      });
+
+      if (!existingRecipe) {
+        throw new Response("Recipe not found", { status: 404 });
+      }
+
+      const isPublic = formData.get("isPublic") === "true";
+      
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: {
+          isPublic,
+          publishedAt: isPublic ? new Date() : null,
+        },
+      });
+
+      return json({ 
+        success: true, 
+        toggledPublic: true,
+        isPublic,
+        message: isPublic ? "Recipe published to community!" : "Recipe made private"
+      });
+    } catch (error) {
+      console.error("Error toggling recipe visibility:", error);
+      return json({ error: "Failed to update recipe visibility" }, { status: 500 });
+    }
+  }
 
   return json({ error: "Invalid action" }, { status: 400 });
 };
@@ -459,6 +491,9 @@ export default function RecipeDetail() {
           setNewGroceryListName('');
           const listName = 'groceryListName' in actionData ? actionData.groceryListName : 'grocery list';
           setToast({ message: `Ingredients added to ${listName}!`, type: 'success' });
+        } else if ('toggledPublic' in actionData && actionData.toggledPublic) {
+          const message = 'message' in actionData ? actionData.message : 'Recipe visibility updated!';
+          setToast({ message: message as string, type: 'success' });
         } else {
           setIsEditing(false);
           setToast({ message: 'Recipe updated successfully!', type: 'success' });
@@ -570,13 +605,40 @@ export default function RecipeDetail() {
             </button>
             
             {!isEditing && (
-              <button
-                onClick={() => setShowDeleteConfirm(true)}
-                className="inline-flex items-center px-4 py-2 text-sm font-medium text-red-700 bg-white border border-red-300 rounded-md hover:bg-red-50"
-              >
-                <Trash2 size={16} className="mr-2" />
-                Delete
-              </button>
+              <>
+                <Form method="post" className="inline">
+                  <input type="hidden" name="intent" value="togglePublic" />
+                  <input type="hidden" name="isPublic" value={(!recipe.isPublic).toString()} />
+                  <button
+                    type="submit"
+                    className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-md border ${
+                      recipe.isPublic
+                        ? 'text-orange-700 bg-white border-orange-300 hover:bg-orange-50'
+                        : 'text-green-700 bg-white border-green-300 hover:bg-green-50'
+                    }`}
+                  >
+                    {recipe.isPublic ? (
+                      <>
+                        <Lock size={16} className="mr-2" />
+                        Make Private
+                      </>
+                    ) : (
+                      <>
+                        <Globe size={16} className="mr-2" />
+                        Publish to Community
+                      </>
+                    )}
+                  </button>
+                </Form>
+                
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-red-700 bg-white border border-red-300 rounded-md hover:bg-red-50"
+                >
+                  <Trash2 size={16} className="mr-2" />
+                  Delete
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -852,7 +914,15 @@ export default function RecipeDetail() {
             
             {/* Recipe Info */}
             <div className={recipe.imageUrl ? "lg:w-2/3" : "w-full"}>
-              <h1 className="text-3xl font-bold text-gray-900 mb-3">{recipe.title}</h1>
+              <div className="flex items-center gap-3 mb-3">
+                <h1 className="text-3xl font-bold text-gray-900">{recipe.title}</h1>
+                {recipe.isPublic && (
+                  <div className="flex items-center px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                    <Globe size={12} className="mr-1" />
+                    Public
+                  </div>
+                )}
+              </div>
               
               {recipe.description && (
                 <p className="text-gray-600 text-lg mb-4">{recipe.description}</p>

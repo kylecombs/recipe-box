@@ -37,6 +37,9 @@ model Recipe {
   instructions     String?           @db.Text
   parentId         String?
   version          Int               @default(1)
+  isPublic         Boolean           @default(false)
+  publishedAt      DateTime?
+  saveCount        Int               @default(0)
   groceryListItems GroceryListItem[]
   ingredients      Ingredient[]
   instructionSteps Instruction[]
@@ -51,6 +54,8 @@ model Recipe {
   @@unique([sourceUrl, version])
   @@index([parentId], map: "Recipe_parentId_fkey")
   @@index([userId], map: "Recipe_userId_fkey")
+  @@index([isPublic], map: "Recipe_isPublic_idx")
+  @@index([saveCount], map: "Recipe_saveCount_idx")
 }
 
 model Ingredient {
@@ -157,13 +162,14 @@ model MealPlan {
 }
 
 model UserRecipe {
-  id         String   @id @default(uuid())
-  userId     String
-  recipeId   String
-  importedAt DateTime @default(now())
-  hasUpdates Boolean  @default(false)
-  recipe     Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              String   @id @default(uuid())
+  userId          String
+  recipeId        String
+  importedAt      DateTime @default(now())
+  hasUpdates      Boolean  @default(false)
+  savedFromPublic Boolean  @default(false)
+  recipe          Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, recipeId])
   @@index([recipeId], map: "UserRecipe_recipeId_fkey")
