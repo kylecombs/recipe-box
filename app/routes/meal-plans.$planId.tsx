@@ -1,6 +1,6 @@
 import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
 import { useLoaderData, Link, useFetcher } from "@remix-run/react";
-import { ArrowLeft, ShoppingCart } from "lucide-react";
+import { ArrowLeft, ShoppingCart, Edit } from "lucide-react";
 import { requireUserId } from "~/utils/auth.server";
 import { db } from "~/utils/db.server";
 import { areIngredientsEqual, combineQuantities } from "~/utils/ingredient-matcher.server";
@@ -173,13 +173,24 @@ export default function MealPlanDetail() {
           Back to Meal Plans
         </Link>
         
-        <h1 className="text-3xl font-bold">{mealPlan.name}</h1>
-        {mealPlan.description && (
-          <p className="text-gray-600 mt-2">{mealPlan.description}</p>
-        )}
-        <p className="text-sm text-gray-500 mt-1">
-          Created on {new Date(mealPlan.createdAt).toLocaleDateString()}
-        </p>
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-bold">{mealPlan.name}</h1>
+            {mealPlan.description && (
+              <p className="text-gray-600 mt-2">{mealPlan.description}</p>
+            )}
+            <p className="text-sm text-gray-500 mt-1">
+              Created on {new Date(mealPlan.createdAt).toLocaleDateString()}
+            </p>
+          </div>
+          <Link
+            to={`/meal-plans/edit/${mealPlan.id}`}
+            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            <Edit size={16} className="mr-2" />
+            Edit Plan
+          </Link>
+        </div>
       </div>
       
       <Toast
