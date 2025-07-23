@@ -9,6 +9,7 @@ import IngredientsList from "~/components/IngredientsList";
 import InstructionsList from "~/components/InstructionsList";
 import TagsList from "~/components/TagsList";
 import Toast from "~/components/Toast";
+import GroceryListModal from "~/components/GroceryListModal";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const userId = await requireUserId(request);
@@ -18,25 +19,32 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     throw new Response("Recipe not found", { status: 404 });
   }
 
-  const recipe = await db.recipe.findFirst({
+  // Check if user has access to this recipe through UserRecipe association
+  const userRecipe = await db.userRecipe.findFirst({
     where: {
-      id: recipeId,
       userId: userId,
+      recipeId: recipeId,
     },
     include: {
-      ingredients: {
-        orderBy: { createdAt: "asc" },
-      },
-      instructions: {
-        orderBy: { stepNumber: "asc" },
-      },
-      tags: {
+      recipe: {
         include: {
-          tag: true,
+          ingredients: {
+            orderBy: { createdAt: "asc" },
+          },
+          instructionSteps: {
+            orderBy: { stepNumber: "asc" },
+          },
+          tags: {
+            include: {
+              tag: true,
+            },
+          },
         },
       },
     },
   });
+
+  const recipe = userRecipe?.recipe;
 
   if (!recipe) {
     throw new Response("Recipe not found", { status: 404 });
@@ -80,7 +88,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         where: { id: recipeId, userId },
         include: {
           ingredients: true,
-          instructions: true,
+          instructionSteps: true,
           tags: { include: { tag: true } },
         }
       });
@@ -112,7 +120,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         where: { id: recipeId, userId },
         include: {
           ingredients: true,
-          instructions: true,
+          instructionSteps: true,
           tags: { include: { tag: true } },
         }
       });
@@ -159,7 +167,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         where: { id: recipeId, userId },
         include: {
           ingredients: true,
-          instructions: true,
+          instructionSteps: true,
           tags: { include: { tag: true } },
         }
       });
@@ -332,7 +340,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         where: { id: recipeId, userId },
         include: {
           ingredients: true,
-          instructions: true,
+          instructionSteps: true,
           tags: { include: { tag: true } },
         }
       });
@@ -371,6 +379,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
             quantity: ing.quantity,
             unit: ing.unit,
             notes: ing.notes,
+            original: ing.original || `${ing.quantity || ''} ${ing.unit || ''} ${ing.name}`.trim(),
             recipeId: recipeId
           }))
         });
@@ -406,7 +415,7 @@ export default function RecipeDetail() {
   
   // Initialize ingredients and instructions state for editing
   const [editableIngredients, setEditableIngredients] = useState(recipe.ingredients);
-  const [editableInstructions, setEditableInstructions] = useState(recipe.instructions);
+  const [editableInstructions, setEditableInstructions] = useState(recipe.instructionSteps);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [isAddingNote, setIsAddingNote] = useState(false);
@@ -444,11 +453,11 @@ export default function RecipeDetail() {
   useEffect(() => {
     if (isEditing) {
       setEditableIngredients(recipe.ingredients);
-      setEditableInstructions(recipe.instructions);
+      setEditableInstructions(recipe.instructionSteps);
     } else {
       setImagePreview(null);
     }
-  }, [isEditing, recipe.ingredients, recipe.instructions]);
+  }, [isEditing, recipe.ingredients, recipe.instructionSteps]);
   
   const addIngredient = () => {
     setEditableIngredients([...editableIngredients, {
@@ -895,7 +904,7 @@ export default function RecipeDetail() {
             
             {/* Instructions */}
             <div className="lg:col-span-2">
-              <InstructionsList instructions={recipe.instructions} />
+              <InstructionsList instructions={recipe.instructionSteps} />
             </div>
           </div>
           
@@ -1026,97 +1035,22 @@ export default function RecipeDetail() {
       )}
       
       {/* Grocery List Modal */}
-      {showGroceryListModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <div className="flex items-center mb-4">
-              <ShoppingCart size={24} className="text-green-600 mr-3" />
-              <h3 className="text-lg font-semibold text-gray-900">Add to Grocery List</h3>
-            </div>
-            
-            <Form method="post" className="space-y-4">
-              <input type="hidden" name="intent" value="addToGroceryList" />
-              
-              {groceryLists.length > 0 && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Select existing list:
-                  </label>
-                  <select
-                    name="groceryListId"
-                    value={selectedGroceryListId}
-                    onChange={(e) => {
-                      setSelectedGroceryListId(e.target.value);
-                      if (e.target.value) setNewGroceryListName('');
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                  >
-                    <option value="">-- Select a list --</option>
-                    {groceryLists.map((list) => (
-                      <option key={list.id} value={list.id}>
-                        {list.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              
-              <div className="text-center text-sm text-gray-500">
-                {groceryLists.length > 0 ? 'or' : ''}
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Create new list:
-                </label>
-                <input
-                  type="text"
-                  name="newListName"
-                  value={newGroceryListName}
-                  onChange={(e) => {
-                    setNewGroceryListName(e.target.value);
-                    if (e.target.value) setSelectedGroceryListId('');
-                  }}
-                  placeholder="Enter list name..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                />
-              </div>
-              
-              <div className="bg-gray-50 p-3 rounded-md">
-                <p className="text-sm text-gray-600 mb-2">
-                  This will add all {recipe.ingredients.length} ingredients from this recipe.
-                </p>
-                <p className="text-xs text-gray-500">
-                  Duplicate ingredients will be combined with existing quantities.
-                </p>
-              </div>
-              
-              <div className="flex gap-3 justify-end">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowGroceryListModal(false);
-                    setSelectedGroceryListId('');
-                    setNewGroceryListName('');
-                  }}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
-                >
-                  Cancel
-                </button>
-                
-                <button
-                  type="submit"
-                  disabled={!selectedGroceryListId && !newGroceryListName.trim()}
-                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ShoppingCart size={16} className="mr-2" />
-                  Add Ingredients
-                </button>
-              </div>
-            </Form>
-          </div>
-        </div>
-      )}
+      <GroceryListModal
+        isOpen={showGroceryListModal}
+        onClose={() => {
+          setShowGroceryListModal(false);
+          setSelectedGroceryListId('');
+          setNewGroceryListName('');
+        }}
+        groceryLists={groceryLists}
+        selectedGroceryListId={selectedGroceryListId}
+        setSelectedGroceryListId={setSelectedGroceryListId}
+        newGroceryListName={newGroceryListName}
+        setNewGroceryListName={setNewGroceryListName}
+        itemCount={recipe.ingredients.length}
+        itemDescription="ingredients"
+        actionIntent="addToGroceryList"
+      />
     </div>
   );
 }

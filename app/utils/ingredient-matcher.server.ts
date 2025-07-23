@@ -309,8 +309,9 @@ export function combineQuantities(
   
   // If units are different or missing, concatenate
   if (!unit1 || !unit2 || unit1.toLowerCase() !== unit2.toLowerCase()) {
+    const combined = `${quantity1}${unit1 ? ` ${unit1}` : ''} + ${quantity2}${unit2 ? ` ${unit2}` : ''}`;
     return { 
-      quantity: `${quantity1}${unit1 ? ` ${unit1}` : ''} + ${quantity2}${unit2 ? ` ${unit2}` : ''}`,
+      quantity: combined.length > 150 ? combined.substring(0, 150) + '...' : combined,
       unit: null
     };
   }
@@ -346,8 +347,9 @@ export function combineQuantities(
   }
   
   // If we can't combine numerically, concatenate
+  const combined = `${quantity1} + ${quantity2}`;
   return { 
-    quantity: `${quantity1} + ${quantity2}`,
+    quantity: combined.length > 150 ? combined.substring(0, 150) + '...' : combined,
     unit: unit1
   };
 }

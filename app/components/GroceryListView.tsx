@@ -60,13 +60,11 @@ export default function GroceryListView({
   // Reset editing state when edit is successful
   useEffect(() => {
     if (editSuccess && !isSubmitting) {
-      console.log('Edit successful, closing edit mode');
       setEditingItemId(null);
       setEditForm({ name: '', quantity: '', unit: '' });
     }
   }, [editSuccess, isSubmitting]);
 
-  console.log(items);
   return (
     <div className={className}>
       {/* Progress Bar */}

@@ -6,6 +6,7 @@ interface RecipeCardProps {
   prepTime?: number;
   cookTime?: number;
   servings?: number;
+  hasUpdates?: boolean;
 }
 
 export default function RecipeCard({ 
@@ -15,10 +16,16 @@ export default function RecipeCard({
   imageUrl, 
   prepTime, 
   cookTime, 
-  servings 
+  servings,
+  hasUpdates
 }: RecipeCardProps) {
   return (
-    <a href={`/recipes/${id}`} className="block border rounded-lg p-4 hover:shadow-lg transition-shadow">
+    <a href={`/recipes/${id}`} className="block border rounded-lg p-4 hover:shadow-lg transition-shadow relative">
+      {hasUpdates && (
+        <div className="absolute top-2 right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-full">
+          Update Available
+        </div>
+      )}
       {imageUrl && (
         <img 
           src={imageUrl} 
