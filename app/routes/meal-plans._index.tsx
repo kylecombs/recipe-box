@@ -1,6 +1,6 @@
 import { json, type LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData, Link } from "@remix-run/react";
-import { Calendar, ChevronRight } from "lucide-react";
+import { Calendar, ChevronRight, Edit } from "lucide-react";
 import { requireUserId } from "~/utils/auth.server";
 import { db } from "~/utils/db.server";
 
@@ -47,23 +47,42 @@ export default function MealPlans() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {mealPlans.map((plan) => (
-            <Link
+            <div
               key={plan.id}
-              to={`/meal-plans/${plan.id}`}
-              className="block bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6"
+              className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6"
             >
-              <h3 className="text-lg font-semibold mb-2">{plan.name}</h3>
-              {plan.description && (
-                <p className="text-gray-600 text-sm mb-3 line-clamp-2">
-                  {plan.description}
-                </p>
-              )}
-              <div className="flex justify-between items-center text-sm text-gray-500">
-                <span>{plan.days} days</span>
-                <span>{new Date(plan.createdAt).toLocaleDateString()}</span>
+              <Link
+                to={`/meal-plans/${plan.id}`}
+                className="block"
+              >
+                <h3 className="text-lg font-semibold mb-2">{plan.name}</h3>
+                {plan.description && (
+                  <p className="text-gray-600 text-sm mb-3 line-clamp-2">
+                    {plan.description}
+                  </p>
+                )}
+                <div className="flex justify-between items-center text-sm text-gray-500 mb-3">
+                  <span>{plan.days} days</span>
+                  <span>{new Date(plan.createdAt).toLocaleDateString()}</span>
+                </div>
+              </Link>
+              <div className="flex justify-between items-center">
+                <Link
+                  to={`/meal-plans/edit/${plan.id}`}
+                  className="inline-flex items-center px-3 py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Edit size={14} className="mr-1" />
+                  Edit
+                </Link>
+                <Link
+                  to={`/meal-plans/${plan.id}`}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <ChevronRight size={20} />
+                </Link>
               </div>
-              <ChevronRight className="ml-auto mt-3 text-gray-400" size={20} />
-            </Link>
+            </div>
           ))}
         </div>
       )}
