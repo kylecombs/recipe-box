@@ -33,21 +33,21 @@ export default function MealPlans() {
   
   return (
     <div className="max-w-6xl mx-auto p-6">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">Saved Meal Plans</h1>
-        <div className="flex gap-3">
+      <div className="sm:flex sm:justify-between sm:items-center mb-8">
+        <h1 className="text-3xl font-bold">My Meal Plans</h1>
+        <div className="flex gap-3 pt-4 sm:pt-0">
           <Link
             to="/meal-plans/new"
             className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
           >
-            <ChefHat size={16} className="mr-2" />
+            <ChefHat size={16} className="mr-2 hidden sm:block" />
             Create Manually
           </Link>
           <Link
             to="/meal-plan"
             className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
-            <Bot size={16} className="mr-2" />
+            <Bot size={16} className="mr-2 hidden sm:block" />
             Generate with AI
           </Link>
         </div>
@@ -82,7 +82,7 @@ export default function MealPlans() {
           {mealPlans.map((plan) => (
             <div
               key={plan.id}
-              className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6"
+              className="flex flex-col justify-between bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6"
             >
               <Link
                 to={`/meal-plans/${plan.id}`}

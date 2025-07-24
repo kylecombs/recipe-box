@@ -4,8 +4,12 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useLoaderData,
 } from "@remix-run/react";
-import type { LinksFunction } from "@remix-run/node";
+import type { LinksFunction, LoaderFunctionArgs } from "@remix-run/node";
+import { json } from "@remix-run/node";
+import { Header } from "~/components/Header";
+import { getUserId } from "~/utils/auth.server";
 
 import "./tailwind.css";
 
@@ -21,6 +25,11 @@ export const links: LinksFunction = () => [
     href: "https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap",
   },
 ];
+
+export async function loader({ request }: LoaderFunctionArgs) {
+  const userId = await getUserId(request);
+  return json({ userId });
+}
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -41,5 +50,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  return <Outlet />;
+  const { userId } = useLoaderData<typeof loader>();
+  
+  return (
+    <>
+      <Header userId={userId || undefined} />
+      <main>
+        <Outlet />
+      </main>
+    </>
+  );
 }

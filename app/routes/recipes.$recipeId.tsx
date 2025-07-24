@@ -1,6 +1,6 @@
 import { json, LoaderFunctionArgs, ActionFunctionArgs, redirect } from "@remix-run/node";
-import { useLoaderData, Link, Form, useActionData, useNavigation } from "@remix-run/react";
-import { ArrowLeft, Clock, Users, ExternalLink, Edit2, Save, X, Plus, Trash2, Upload, StickyNote, AlertTriangle, ShoppingCart, Star, Globe, Lock } from "lucide-react";
+import { useLoaderData, Form, useActionData, useNavigation } from "@remix-run/react";
+import { Clock, Users, ExternalLink, Edit2, Save, X, Plus, Trash2, Upload, StickyNote, AlertTriangle, ShoppingCart, Star, Globe, Lock } from "lucide-react";
 import { useState, useEffect } from "react";
 import { db } from "~/utils/db.server";
 import { requireUserId } from "~/utils/auth.server";
@@ -588,17 +588,9 @@ export default function RecipeDetail() {
         />
       )}
       
-      {/* Header */}
+      {/* Page Actions */}
       <div className="mb-6">
-        <div className="flex justify-between items-center mb-4">
-          <Link 
-            to="/recipes" 
-            className="inline-flex items-center text-blue-600 hover:text-blue-800"
-          >
-            <ArrowLeft size={20} className="mr-2" />
-            Back to Recipes
-          </Link>
-          
+        <div className="flex justify-end mb-4">
           <div className="flex gap-2">
             <button
               onClick={() => setIsEditing(!isEditing)}
@@ -1054,7 +1046,16 @@ export default function RecipeDetail() {
 
       {/* Timers - Only show when not editing */}
       {!isEditing && detectedTimers.length > 0 && (
-        <TimerManager timers={detectedTimers} recipeId={recipe.id} />
+        <TimerManager 
+          timers={detectedTimers} 
+          recipeId={recipe.id}
+          onContextClick={(timer) => {
+            // Scroll to the timer context in the instructions
+            if ((window as any).scrollToTimerInInstructions) {
+              (window as any).scrollToTimerInInstructions(timer);
+            }
+          }}
+        />
       )}
 
       {/* Recipe Content - Only show when not editing */}
@@ -1077,7 +1078,12 @@ export default function RecipeDetail() {
             
             {/* Instructions */}
             <div className="lg:col-span-2">
-              <InstructionsList instructions={recipe.instructionSteps} />
+              <InstructionsList 
+                instructions={recipe.instructionSteps} 
+                timers={detectedTimers}
+                recipeTitle={recipe.title}
+                recipeDescription={recipe.description || ""}
+              />
             </div>
           </div>
           

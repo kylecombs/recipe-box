@@ -1,5 +1,5 @@
 import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
-import { useLoaderData, useFetcher } from "@remix-run/react";
+import { useLoaderData, useFetcher, Link } from "@remix-run/react";
 import { requireUserId } from "~/utils/auth.server";
 import { db } from "~/utils/db.server";
 import { generateMealPlan, checkMealPlannerHealth } from "~/utils/meal-planner.server";
@@ -520,21 +520,48 @@ export default function MealPlan() {
                   <div className="space-y-2">
                     <div>
                       <span className="font-medium text-sm">Breakfast:</span>
-                      <p className="text-sm">{day.breakfast.recipe}</p>
+                      {day.breakfast.recipeId ? (
+                        <Link
+                          to={`/recipes/${day.breakfast.recipeId}`}
+                          className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {day.breakfast.recipe}
+                        </Link>
+                      ) : (
+                        <p className="text-sm">{day.breakfast.recipe}</p>
+                      )}
                       {day.breakfast.notes && (
                         <p className="text-xs text-gray-600">{day.breakfast.notes}</p>
                       )}
                     </div>
                     <div>
                       <span className="font-medium text-sm">Lunch:</span>
-                      <p className="text-sm">{day.lunch.recipe}</p>
+                      {day.lunch.recipeId ? (
+                        <Link
+                          to={`/recipes/${day.lunch.recipeId}`}
+                          className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {day.lunch.recipe}
+                        </Link>
+                      ) : (
+                        <p className="text-sm">{day.lunch.recipe}</p>
+                      )}
                       {day.lunch.notes && (
                         <p className="text-xs text-gray-600">{day.lunch.notes}</p>
                       )}
                     </div>
                     <div>
                       <span className="font-medium text-sm">Dinner:</span>
-                      <p className="text-sm">{day.dinner.recipe}</p>
+                      {day.dinner.recipeId ? (
+                        <Link
+                          to={`/recipes/${day.dinner.recipeId}`}
+                          className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {day.dinner.recipe}
+                        </Link>
+                      ) : (
+                        <p className="text-sm">{day.dinner.recipe}</p>
+                      )}
                       {day.dinner.notes && (
                         <p className="text-xs text-gray-600">{day.dinner.notes}</p>
                       )}

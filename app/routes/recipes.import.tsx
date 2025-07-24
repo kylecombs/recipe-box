@@ -418,18 +418,12 @@ Instructions:
         </Form>
       )}
       
-      <div className="pt-4 mt-6 border-t flex justify-between">
+      <div className="pt-4 mt-6 border-t flex justify-center">
         <a 
           href="/recipes/new" 
           className="text-blue-600 hover:text-blue-800"
         >
           Enter recipe manually instead
-        </a>
-        <a 
-          href="/recipes" 
-          className="text-gray-600 hover:text-gray-800"
-        >
-          Back to recipes
         </a>
       </div>
     </div>

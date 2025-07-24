@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Play, Pause, RotateCcw, Clock, AlertCircle } from "lucide-react";
 import type { DetectedTimer, TimerState } from "~/utils/time-parser";
 
@@ -6,44 +6,144 @@ interface TimerProps {
   timer: DetectedTimer;
   onStateChange?: (state: TimerState) => void;
   initialState?: TimerState;
+  onContextClick?: (timer: DetectedTimer) => void;
 }
 
-export default function Timer({ timer, onStateChange, initialState }: TimerProps) {
-  const [state, setState] = useState<TimerState>(() => {
-    if (initialState) {
-      return initialState;
-    }
+export default function Timer({ timer, onStateChange, initialState, onContextClick }: TimerProps) {
+  const totalDurationMs = timer.minutes * 60 * 1000; // Convert to milliseconds
+  const storageKey = `timer_${timer.id}`;
+  const pausedStorageKey = `${storageKey}_paused`;
+  
+  const [timerData, setTimerData] = useState(() => {
     return {
-      id: timer.id,
+      date: Date.now(),
+      delay: totalDurationMs,
       isRunning: false,
-      remainingTime: timer.minutes * 60, // Convert to seconds
-      startTime: 0,
-      totalDuration: timer.minutes * 60,
+      isPaused: false,
     };
   });
 
+  const [remainingTime, setRemainingTime] = useState(Math.floor(totalDurationMs / 1000));
+  const [isInitialized, setIsInitialized] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Update parent component when state changes
-  useEffect(() => {
-    onStateChange?.(state);
-  }, [state, onStateChange]);
+  // Helper function to get value from localStorage
+  const getLocalStorageValue = (key: string): string | null => {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem(key);
+  };
 
-  // Handle timer countdown
+  // Helper function to set value in localStorage
+  const setLocalStorageValue = (key: string, value: string): void => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(key, value);
+  };
+
+  // Helper function to remove value from localStorage
+  const removeLocalStorageValue = (key: string): void => {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(key);
+  };
+
+  // Initialize timer state from localStorage on mount
   useEffect(() => {
-    if (state.isRunning && state.remainingTime > 0) {
-      intervalRef.current = setInterval(() => {
-        setState(prevState => {
-          const now = Date.now();
-          const elapsed = Math.floor((now - prevState.startTime) / 1000);
-          const newRemainingTime = Math.max(0, prevState.totalDuration - elapsed);
-          
-          return {
-            ...prevState,
-            remainingTime: newRemainingTime,
-          };
+    const savedEndDate = getLocalStorageValue(storageKey);
+    const pausedData = getLocalStorageValue(pausedStorageKey);
+    
+    if (pausedData) {
+      // Timer was paused
+      try {
+        const pausedInfo = JSON.parse(pausedData);
+        const remaining = Math.floor(pausedInfo.remainingTime / 1000);
+        setRemainingTime(remaining);
+        setTimerData({
+          date: Date.now(),
+          delay: pausedInfo.remainingTime,
+          isRunning: false,
+          isPaused: true,
         });
+      } catch (e) {
+        console.error('Failed to parse paused timer data:', e);
+        removeLocalStorageValue(pausedStorageKey);
+      }
+    } else if (savedEndDate && !isNaN(parseInt(savedEndDate, 10))) {
+      // Timer was running
+      const currentTime = Date.now();
+      const endTime = parseInt(savedEndDate, 10);
+      const delta = endTime - currentTime;
+
+      if (delta > totalDurationMs) {
+        // Invalid end date (somehow longer than total duration), clear it
+        removeLocalStorageValue(storageKey);
+      } else if (delta <= 0) {
+        // Timer has expired while we were away
+        setRemainingTime(0);
+        setTimerData({
+          date: currentTime,
+          delay: 0,
+          isRunning: false,
+          isPaused: false,
+        });
+        removeLocalStorageValue(storageKey);
+      } else {
+        // Timer is still running - restore the running state
+        const remaining = Math.floor(delta / 1000);
+        setRemainingTime(remaining);
+        setTimerData({
+          date: currentTime,
+          delay: delta,
+          isRunning: true,
+          isPaused: false,
+        });
+      }
+    } else if (initialState) {
+      // Use initial state if provided and no saved state
+      setRemainingTime(initialState.remainingTime);
+      setTimerData({
+        date: initialState.startTime || Date.now(),
+        delay: initialState.remainingTime * 1000,
+        isRunning: initialState.isRunning,
+        isPaused: initialState.isPaused || false,
+      });
+    }
+    
+    setIsInitialized(true);
+  }, []); // Only run once on mount
+
+  // Timer countdown effect - only start after initialization
+  useEffect(() => {
+    if (!isInitialized) return;
+
+    if (timerData.isRunning && !timerData.isPaused) {
+      intervalRef.current = setInterval(() => {
+        const savedEndDate = getLocalStorageValue(storageKey);
+        if (savedEndDate) {
+          const currentTime = Date.now();
+          const endTime = parseInt(savedEndDate, 10);
+          const remaining = Math.max(0, Math.floor((endTime - currentTime) / 1000));
+          
+          setRemainingTime(remaining);
+          
+          if (remaining === 0) {
+            // Timer completed
+            setTimerData(prev => ({ ...prev, isRunning: false }));
+            removeLocalStorageValue(storageKey);
+            
+            // Play notification sound
+            if (audioRef.current) {
+              audioRef.current.play().catch(e => console.log('Audio play failed:', e));
+            }
+            
+            // Browser notification
+            if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification(`Timer Complete: ${timer.label}`, {
+                body: `Your ${timer.type} timer has finished!`,
+                icon: '/favicon.ico',
+              });
+            }
+          }
+        }
       }, 1000);
     } else {
       if (intervalRef.current) {
@@ -55,82 +155,86 @@ export default function Timer({ timer, onStateChange, initialState }: TimerProps
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
     };
-  }, [state.isRunning, state.remainingTime, state.startTime, state.totalDuration]);
+  }, [isInitialized, timerData.isRunning, timerData.isPaused, storageKey, timer.label, timer.type]);
 
-  // Handle timer completion
+  // Update parent component when state changes
   useEffect(() => {
-    if (state.isRunning && state.remainingTime === 0) {
-      setState(prev => ({ ...prev, isRunning: false }));
-      
-      // Play notification sound
-      if (audioRef.current) {
-        audioRef.current.play().catch(e => console.log('Audio play failed:', e));
-      }
-      
-      // Browser notification
-      if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification(`Timer Complete: ${timer.label}`, {
-          body: `Your ${timer.type} timer has finished!`,
-          icon: '/favicon.ico',
-        });
-      }
+    if (onStateChange && isInitialized) {
+      onStateChange({
+        id: timer.id,
+        isRunning: timerData.isRunning,
+        remainingTime,
+        startTime: timerData.date,
+        totalDuration: Math.floor(totalDurationMs / 1000),
+        isPaused: timerData.isPaused,
+      });
     }
-  }, [state.isRunning, state.remainingTime, timer.label, timer.type]);
+  }, [timerData, remainingTime, timer.id, totalDurationMs, onStateChange, isInitialized]);
 
-  const handleStart = () => {
-    if (state.remainingTime === 0) {
-      // Reset if timer is at 0
+  const handleStart = useCallback(() => {
+    if (remainingTime === 0) {
+      // Reset timer if it's at 0
       handleReset();
       return;
     }
 
     const now = Date.now();
-    let startTime = now;
-    const remainingTime = state.remainingTime;
+    const endTime = now + (remainingTime * 1000);
+    
+    // Save end time to localStorage
+    setLocalStorageValue(storageKey, endTime.toString());
+    
+    // Clear any paused state
+    removeLocalStorageValue(pausedStorageKey);
 
-    // If resuming from pause, calculate correct start time
-    if (state.pausedTime) {
-      startTime = now - (state.totalDuration - remainingTime) * 1000;
-    } else if (!state.startTime) {
-      // First time starting
-      startTime = now;
-    } else {
-      // Already has a start time, keep it
-      startTime = state.startTime;
-    }
-
-    setState(prev => ({
-      ...prev,
+    setTimerData({
+      date: now,
+      delay: remainingTime * 1000,
       isRunning: true,
-      startTime,
-      pausedTime: undefined,
-    }));
+      isPaused: false,
+    });
 
     // Request notification permission
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
-  };
+  }, [remainingTime, storageKey, pausedStorageKey]);
 
-  const handlePause = () => {
-    setState(prev => ({
+  const handlePause = useCallback(() => {
+    // Save paused state with remaining time
+    const pausedInfo = {
+      remainingTime: remainingTime * 1000,
+      pausedAt: Date.now(),
+    };
+    setLocalStorageValue(pausedStorageKey, JSON.stringify(pausedInfo));
+    
+    // Remove running timer end date
+    removeLocalStorageValue(storageKey);
+
+    setTimerData(prev => ({
       ...prev,
       isRunning: false,
-      pausedTime: Date.now(),
+      isPaused: true,
     }));
-  };
+  }, [remainingTime, storageKey, pausedStorageKey]);
 
-  const handleReset = () => {
-    setState({
-      id: timer.id,
+  const handleReset = useCallback(() => {
+    // Clear all localStorage for this timer
+    removeLocalStorageValue(storageKey);
+    removeLocalStorageValue(pausedStorageKey);
+
+    const resetTime = Math.floor(totalDurationMs / 1000);
+    setRemainingTime(resetTime);
+    setTimerData({
+      date: Date.now(),
+      delay: totalDurationMs,
       isRunning: false,
-      remainingTime: timer.minutes * 60,
-      startTime: 0,
-      totalDuration: timer.minutes * 60,
+      isPaused: false,
     });
-  };
+  }, [storageKey, pausedStorageKey, totalDurationMs]);
 
   const formatTime = (seconds: number): string => {
     const hours = Math.floor(seconds / 3600);
@@ -146,37 +250,30 @@ export default function Timer({ timer, onStateChange, initialState }: TimerProps
   };
 
   const getProgressPercentage = (): number => {
-    return ((state.totalDuration - state.remainingTime) / state.totalDuration) * 100;
+    const totalSeconds = Math.floor(totalDurationMs / 1000);
+    return ((totalSeconds - remainingTime) / totalSeconds) * 100;
   };
 
   const getTimerColor = (): string => {
-    if (state.remainingTime === 0) return 'text-red-600';
-    if (state.isRunning) return 'text-green-600';
+    if (remainingTime === 0) return 'text-red-600';
+    if (timerData.isRunning) return 'text-green-600';
+    if (timerData.isPaused) return 'text-orange-600';
     return 'text-gray-600';
   };
 
   const getBackgroundColor = (): string => {
-    if (state.remainingTime === 0) return 'bg-red-50 border-red-200';
-    if (state.isRunning) return 'bg-green-50 border-green-200';
+    if (remainingTime === 0) return 'bg-red-50 border-red-200';
+    if (timerData.isRunning) return 'bg-green-50 border-green-200';
+    if (timerData.isPaused) return 'bg-orange-50 border-orange-200';
     return 'bg-gray-50 border-gray-200';
   };
 
   const getTypeIcon = () => {
     const iconProps = { size: 16, className: "mr-2" };
     
-    switch (timer.type) {
-      case 'baking':
-      case 'cooking':
-        return <Clock {...iconProps} />;
-      case 'marinating':
-      case 'chilling':
-        return <Clock {...iconProps} />;
-      case 'resting':
-      case 'rising':
-        return <Clock {...iconProps} />;
-      default:
-        return <Clock {...iconProps} />;
-    }
+    // All timer types use the Clock icon for now
+    // Could be enhanced later with specific icons for different cooking methods
+    return <Clock {...iconProps} />;
   };
 
   return (
@@ -195,11 +292,14 @@ export default function Timer({ timer, onStateChange, initialState }: TimerProps
           {getTypeIcon()}
           <div>
             <h4 className="font-medium text-gray-900">{timer.label}</h4>
-            <p className="text-xs text-gray-500 capitalize">{timer.type}</p>
+            <p className="text-xs text-gray-500 capitalize">
+              {timer.type}
+              {timerData.isPaused && " • Paused"}
+            </p>
           </div>
         </div>
         
-        {state.remainingTime === 0 && (
+        {remainingTime === 0 && (
           <AlertCircle className="text-red-500" size={20} />
         )}
       </div>
@@ -209,10 +309,12 @@ export default function Timer({ timer, onStateChange, initialState }: TimerProps
         <div className="w-full bg-gray-200 rounded-full h-2">
           <div
             className={`h-2 rounded-full transition-all duration-1000 ${
-              state.remainingTime === 0
+              remainingTime === 0
                 ? 'bg-red-500'
-                : state.isRunning
+                : timerData.isRunning
                 ? 'bg-green-500'
+                : timerData.isPaused
+                ? 'bg-orange-500'
                 : 'bg-gray-400'
             }`}
             style={{ width: `${getProgressPercentage()}%` }}
@@ -222,32 +324,43 @@ export default function Timer({ timer, onStateChange, initialState }: TimerProps
 
       {/* Time display */}
       <div className={`text-2xl font-mono font-bold text-center mb-4 ${getTimerColor()}`}>
-        {formatTime(state.remainingTime)}
+        {formatTime(remainingTime)}
       </div>
 
       {/* Controls */}
       <div className="flex justify-center gap-2">
         <button
-          onClick={state.isRunning ? handlePause : handleStart}
+          onClick={timerData.isRunning ? handlePause : handleStart}
+          disabled={!isInitialized}
           className={`inline-flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-            state.isRunning
+            timerData.isRunning
               ? 'bg-orange-600 text-white hover:bg-orange-700'
-              : state.remainingTime === 0
+              : remainingTime === 0
               ? 'bg-green-600 text-white hover:bg-green-700'
               : 'bg-green-600 text-white hover:bg-green-700'
-          }`}
+          } ${!isInitialized ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
-          {state.isRunning ? (
+          {timerData.isRunning ? (
             <Pause size={16} className="mr-1" />
           ) : (
             <Play size={16} className="mr-1" />
           )}
-          {state.isRunning ? 'Pause' : state.remainingTime === 0 ? 'Restart' : 'Start'}
+          {timerData.isRunning 
+            ? 'Pause' 
+            : remainingTime === 0 
+            ? 'Restart' 
+            : timerData.isPaused 
+            ? 'Resume' 
+            : 'Start'
+          }
         </button>
         
         <button
           onClick={handleReset}
-          className="inline-flex items-center px-3 py-2 bg-gray-600 text-white rounded-md text-sm font-medium hover:bg-gray-700 transition-colors"
+          disabled={!isInitialized}
+          className={`inline-flex items-center px-3 py-2 bg-gray-600 text-white rounded-md text-sm font-medium hover:bg-gray-700 transition-colors ${
+            !isInitialized ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
         >
           <RotateCcw size={16} className="mr-1" />
           Reset
@@ -256,7 +369,15 @@ export default function Timer({ timer, onStateChange, initialState }: TimerProps
 
       {/* Context info */}
       {timer.context && (
-        <div className="mt-3 p-2 bg-gray-100 rounded text-xs text-gray-600">
+        <div 
+          className={`mt-3 p-2 bg-gray-100 rounded text-xs text-gray-600 ${
+            onContextClick && timer.contextStart !== -1 
+              ? 'cursor-pointer hover:bg-gray-200 transition-colors' 
+              : ''
+          }`}
+          onClick={() => onContextClick && timer.contextStart !== -1 && onContextClick(timer)}
+          title={onContextClick && timer.contextStart !== -1 ? "Click to jump to this part of the recipe" : undefined}
+        >
           <strong>Context:</strong> {timer.context}
         </div>
       )}

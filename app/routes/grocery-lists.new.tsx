@@ -1,6 +1,6 @@
 import { json, ActionFunctionArgs, redirect } from "@remix-run/node";
-import { Form, useActionData, useNavigation, Link } from "@remix-run/react";
-import { ArrowLeft, ShoppingCart } from "lucide-react";
+import { Form, Link, useActionData, useNavigation } from "@remix-run/react";
+import { ShoppingCart } from "lucide-react";
 import { db } from "~/utils/db.server";
 import { requireUserId } from "~/utils/auth.server";
 
@@ -36,14 +36,6 @@ export default function NewGroceryList() {
   return (
     <div className="max-w-md mx-auto p-6">
       <div className="mb-6">
-        <Link 
-          to="/grocery-lists" 
-          className="inline-flex items-center text-blue-600 hover:text-blue-800 mb-4"
-        >
-          <ArrowLeft size={20} className="mr-2" />
-          Back to Grocery Lists
-        </Link>
-        
         <div className="flex items-center mb-4">
           <ShoppingCart size={32} className="text-green-600 mr-3" />
           <h1 className="text-3xl font-bold text-gray-900">New Grocery List</h1>

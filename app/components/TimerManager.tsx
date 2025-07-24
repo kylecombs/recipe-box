@@ -6,88 +6,63 @@ import type { DetectedTimer, TimerState } from "~/utils/time-parser";
 interface TimerManagerProps {
   timers: DetectedTimer[];
   recipeId: string;
+  onContextClick?: (timer: DetectedTimer) => void;
 }
 
-export default function TimerManager({ timers, recipeId }: TimerManagerProps) {
+export default function TimerManager({ timers, recipeId, onContextClick }: TimerManagerProps) {
   const [timerStates, setTimerStates] = useState<Record<string, TimerState>>({});
   const [isExpanded, setIsExpanded] = useState(false);
   const [hasActiveTimers, setHasActiveTimers] = useState(false);
 
-  // Storage key for persistence
-  const storageKey = `recipe-timers-${recipeId}`;
+  // Timer persistence is now handled by localStorage in individual Timer components
 
-  // Load timer states from localStorage
+  // Check for active timers in localStorage on mount and expand if found
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem(storageKey);
-        if (saved) {
-          const savedStates = JSON.parse(saved) as Record<string, TimerState>;
-          
-          // Validate and restore timer states
+    // Check if any timers are currently running in localStorage
+    const checkForActiveTimers = () => {
+      if (typeof window === 'undefined') return false;
+      
+      let hasRunningTimers = false;
+      
+      // Check each timer's localStorage to see if it's running
+      timers.forEach(timer => {
+        const storageKey = `timer_${timer.id}`;
+        const savedEndDate = localStorage.getItem(storageKey);
+        
+        if (savedEndDate && !isNaN(parseInt(savedEndDate, 10))) {
           const currentTime = Date.now();
-          const restoredStates: Record<string, TimerState> = {};
+          const endTime = parseInt(savedEndDate, 10);
+          const delta = endTime - currentTime;
           
-          timers.forEach(timer => {
-            const savedState = savedStates[timer.id];
-            if (savedState) {
-              let remainingTime = savedState.remainingTime;
-              
-              // If timer was running, calculate elapsed time
-              if (savedState.isRunning && savedState.startTime) {
-                const elapsed = Math.floor((currentTime - savedState.startTime) / 1000);
-                remainingTime = Math.max(0, savedState.totalDuration - elapsed);
-                
-                // If timer expired while away, mark as completed
-                if (remainingTime === 0) {
-                  restoredStates[timer.id] = {
-                    ...savedState,
-                    isRunning: false,
-                    remainingTime: 0,
-                  };
-                } else {
-                  restoredStates[timer.id] = {
-                    ...savedState,
-                    remainingTime,
-                  };
-                }
-              } else if (savedState.pausedTime) {
-                // Timer was paused, keep the paused state
-                restoredStates[timer.id] = savedState;
-              } else {
-                // Timer was stopped
-                restoredStates[timer.id] = savedState;
-              }
-            }
-          });
-          
-          setTimerStates(restoredStates);
+          // If timer has time remaining, it's still running
+          if (delta > 0) {
+            hasRunningTimers = true;
+          }
         }
-      } catch (error) {
-        console.error('Failed to load timer states:', error);
-      }
+      });
+      
+      return hasRunningTimers;
+    };
+    
+    // Expand timer manager if there are active timers on page load
+    if (checkForActiveTimers()) {
+      setIsExpanded(true);
     }
-  }, [recipeId, storageKey, timers]);
+  }, [recipeId, timers]);
 
-  // Save timer states to localStorage
-  const saveTimerStates = useCallback((states: Record<string, TimerState>) => {
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(states));
-      } catch (error) {
-        console.error('Failed to save timer states:', error);
-      }
-    }
-  }, [storageKey]);
+  // Timer state persistence is now handled by individual Timer components via localStorage
+  // This callback just updates the local state for UI purposes
+  const updateTimerState = useCallback((state: TimerState) => {
+    setTimerStates(prev => ({
+      ...prev,
+      [state.id]: state
+    }));
+  }, []);
 
-  // Handle timer state changes
+  // Handle timer state changes (just for UI updates)
   const handleTimerStateChange = useCallback((state: TimerState) => {
-    setTimerStates(prev => {
-      const newStates = { ...prev, [state.id]: state };
-      saveTimerStates(newStates);
-      return newStates;
-    });
-  }, [saveTimerStates]);
+    updateTimerState(state);
+  }, [updateTimerState]);
 
   // Check for active timers
   useEffect(() => {
@@ -175,6 +150,7 @@ export default function TimerManager({ timers, recipeId }: TimerManagerProps) {
                 timer={timer}
                 initialState={timerStates[timer.id]}
                 onStateChange={handleTimerStateChange}
+                onContextClick={onContextClick}
               />
             ))}
           </div>
@@ -183,10 +159,11 @@ export default function TimerManager({ timers, recipeId }: TimerManagerProps) {
           <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
             <p className="font-medium mb-1">💡 Timer Tips:</p>
             <ul className="text-xs space-y-1">
-              <li>• Timers will persist even if you reload the page</li>
+              <li>• Timers persist across page reloads using localStorage</li>
               <li>• Browser notifications will alert you when timers complete</li>
               <li>• Multiple timers can run simultaneously</li>
-              <li>• Use pause/resume to manage your cooking workflow</li>
+              <li>• Pause/resume automatically adjusts end timestamps</li>
+              <li>• Completed timers are automatically cleaned up</li>
             </ul>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import { json, type LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData, Link } from "@remix-run/react";
-import { ArrowLeft, Users, Star, Heart, Clock, ChefHat } from "lucide-react";
+import { Users, Star, Heart, Clock, ChefHat } from "lucide-react";
 import { db } from "~/utils/db.server";
 import { requireUserId } from "~/utils/auth.server";
 import StarRating from "~/components/StarRating";
@@ -83,16 +83,8 @@ export default function CommunityRecipes() {
 
   return (
     <div className="max-w-6xl mx-auto p-6">
-      {/* Header */}
+      {/* Page Header */}
       <div className="mb-8">
-        <Link
-          to="/recipes"
-          className="inline-flex items-center text-blue-600 hover:text-blue-700 mb-4"
-        >
-          <ArrowLeft size={20} className="mr-1" />
-          Back to My Recipes
-        </Link>
-        
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold flex items-center">

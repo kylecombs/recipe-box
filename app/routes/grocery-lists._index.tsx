@@ -1,6 +1,6 @@
 import { json, LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData, Link, Form } from "@remix-run/react";
-import { ShoppingCart, Plus, ArrowLeft, LogOut } from "lucide-react";
+import { useLoaderData, Link } from "@remix-run/react";
+import { ShoppingCart, Plus } from "lucide-react";
 import { db } from "~/utils/db.server";
 import { requireUserId } from "~/utils/auth.server";
 import GroceryListCard from "~/components/GroceryListCard";
@@ -25,13 +25,7 @@ export default function GroceryLists() {
     <div className="max-w-4xl mx-auto p-6">
       <div className="mb-6">
         <div className="flex justify-between items-center mb-4">
-          <Link 
-            to="/recipes" 
-            className="inline-flex items-center text-blue-600 hover:text-blue-800"
-          >
-            <ArrowLeft size={20} className="mr-2" />
-            Back to Recipes
-          </Link>
+          <h1 className="text-3xl font-bold text-gray-900">My Grocery Lists</h1>
           
           <div className="flex gap-3 items-center">
             <Link
@@ -41,19 +35,8 @@ export default function GroceryLists() {
               <Plus size={16} className="mr-2" />
               New List
             </Link>
-            <Form method="post" action="/logout" className="inline">
-              <button
-                type="submit"
-                className="inline-flex items-center px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-md hover:bg-gray-700"
-              >
-                <LogOut size={16} className="mr-2" />
-                Logout
-              </button>
-            </Form>
           </div>
         </div>
-        
-        <h1 className="text-3xl font-bold text-gray-900">Grocery Lists</h1>
       </div>
 
       {groceryLists.length > 0 ? (

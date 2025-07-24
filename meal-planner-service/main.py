@@ -54,6 +54,7 @@ async def generate_meal_plan(request: MealPlanRequest):
         print(f"API key available: {'ANTHROPIC_API_KEY' in os.environ}")
         print(f"API key starts with: {os.getenv('ANTHROPIC_API_KEY', '')[:10]}...")
         recipes_text = "\n\n".join([
+            f"Recipe ID: {r.id}\n"
             f"Recipe: {r.title}\n"
             f"Ingredients: {', '.join(r.ingredients)}\n"
             f"Servings: {r.servings}\n"
@@ -79,15 +80,16 @@ Please create a meal plan that:
 3. Considers the cooking time and complexity
 4. Minimizes food waste by using similar ingredients across meals
 5. Includes breakfast, lunch, and dinner for each day
+6. IMPORTANT: When using a recipe from the available list, include both the recipe title AND the recipe ID
 
 Return the response as a valid JSON object with this structure:
 {{
     "week": [
         {{
             "day": "Monday",
-            "breakfast": {{"recipe": "Recipe Title", "notes": "Any modifications"}},
-            "lunch": {{"recipe": "Recipe Title", "notes": "Any modifications"}},
-            "dinner": {{"recipe": "Recipe Title", "notes": "Any modifications"}}
+            "breakfast": {{"recipe": "Recipe Title", "recipeId": "recipe-id-if-from-available-list", "notes": "Any modifications"}},
+            "lunch": {{"recipe": "Recipe Title", "recipeId": "recipe-id-if-from-available-list", "notes": "Any modifications"}},
+            "dinner": {{"recipe": "Recipe Title", "recipeId": "recipe-id-if-from-available-list", "notes": "Any modifications"}}
         }},
         // ... more days
     ],
@@ -98,7 +100,12 @@ Return the response as a valid JSON object with this structure:
     "notes": "General tips or suggestions for the meal plan"
 }}
 
-Make sure to only use recipes from the available list. For breakfast, if no breakfast recipes are available, suggest simple options like "Toast and eggs" or "Yogurt and fruit"."""
+Make sure to only use recipes from the available list. For breakfast, if no breakfast recipes are available, suggest simple options like "Toast and eggs" or "Yogurt and fruit" (these should NOT have a recipeId since they're not from the available recipes).
+
+IMPORTANT: 
+- If using a recipe from the available list, ALWAYS include the recipeId field with the exact ID provided
+- If suggesting a simple meal not from the list, do NOT include a recipeId field
+- Double-check that recipe IDs match exactly with the ones provided in the available recipes list"""
 
         message = anthropic_client.messages.create(
             model="claude-3-5-sonnet-20241022",
