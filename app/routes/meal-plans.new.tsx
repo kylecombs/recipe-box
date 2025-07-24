@@ -286,7 +286,12 @@ export default function NewMealPlan() {
                         {mealType}
                       </label>
                       <RecipeCombobox
-                        recipes={recipes}
+                        recipes={recipes.map(recipe => ({
+                          ...recipe,
+                          servings: recipe.servings ?? undefined,
+                          prepTime: recipe.prepTime ?? undefined,
+                          cookTime: recipe.cookTime ?? undefined,
+                        }))}
                         value={day[mealType].recipe}
                         onChange={(value, recipeId) => handleDayChange(dayIndex, `${mealType}.recipe`, value, recipeId)}
                         placeholder={`${mealType.charAt(0).toUpperCase() + mealType.slice(1)} recipe`}

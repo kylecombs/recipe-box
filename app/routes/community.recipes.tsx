@@ -1,9 +1,10 @@
 import { json, type LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData, Link } from "@remix-run/react";
-import { Users, Star, Heart, Clock, ChefHat } from "lucide-react";
+import { Users, Heart, Clock, ChefHat } from "lucide-react";
 import { db } from "~/utils/db.server";
 import { requireUserId } from "~/utils/auth.server";
 import StarRating from "~/components/StarRating";
+import type { Prisma } from "@prisma/client";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const userId = await requireUserId(request);
@@ -13,25 +14,25 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const sortBy = searchParams.get("sort") || "popular"; // popular, newest, rating
 
   // Build where clause for search
-  const whereClause: any = {
+  const whereClause: Prisma.RecipeWhereInput = {
     isPublic: true,
   };
 
   if (search) {
     whereClause.OR = [
-      { title: { contains: search, mode: "insensitive" } },
-      { description: { contains: search, mode: "insensitive" } },
+      { title: { contains: search } },
+      { description: { contains: search } },
     ];
   }
 
   // Build order by clause
-  let orderBy: any;
+  let orderBy: Prisma.RecipeOrderByWithRelationInput | Prisma.RecipeOrderByWithRelationInput[];
   switch (sortBy) {
     case "newest":
       orderBy = { publishedAt: "desc" };
       break;
     case "rating":
-      orderBy = [{ ratings: { _count: "desc" } }];
+      orderBy = { saveCount: "desc" }; // Fallback to save count since rating ordering needs aggregation
       break;
     case "popular":
     default:

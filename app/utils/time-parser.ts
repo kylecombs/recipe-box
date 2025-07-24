@@ -50,80 +50,80 @@ const TIME_PATTERNS = [
 const CONTEXT_PATTERNS = {
   // Specific cooking methods - check these first
   broil: [
-    /broil(?:ing)?\s+(?:for\s+)?/i,
+    /broil(?:ing)?(?:\s*,\s*|\s+)(?:for\s+)?/i,
     /under\s+(?:the\s+)?broiler\s+(?:for\s+)?/i,
   ],
   simmer: [
-    /simmer(?:ing)?\s*,?\s*(?:stirring\s+)?(?:occasionally|frequently)?\s*,?\s*(?:until|for)/i,
-    /(?:and\s+)?simmer(?:ing)?\s+(?:for\s+)?/i,
-    /gentle\s+simmer\s+(?:for\s+)?/i,
+    /simmer(?:ing)?(?:\s*,\s*|\s+)(?:stirring\s+)?(?:occasionally|frequently)?(?:\s*,\s*)?\s*(?:until|for)/i,
+    /(?:and\s+)?simmer(?:ing)?(?:\s*,\s*|\s+)(?:for\s+)?/i,
+    /gentle\s+simmer(?:\s*,\s*|\s+)(?:for\s+)?/i,
   ],
   boil: [
-    /(?:bring\s+to\s+(?:a\s+)?)?boil(?:ing)?\s*,?\s*(?:then|and)?\s*(?:reduce\s+heat\s+)?(?:for\s+)?/i,
-    /boil(?:ing)?\s+(?:for\s+)?/i,
+    /(?:bring\s+to\s+(?:a\s+)?)?boil(?:ing)?(?:\s*,\s*|\s+)(?:then|and)?(?:\s*,\s*)?\s*(?:reduce\s+heat\s+)?(?:for\s+)?/i,
+    /boil(?:ing)?(?:\s*,\s*|\s+)(?:for\s+)?/i,
   ],
   bake: [
-    /bak(?:e|ing)\s+(?:for\s+)?/i,
-    /in\s+(?:the\s+)?oven\s+(?:for\s+)?/i,
-    /at\s+\d+°[CF]\s+(?:for\s+)?/i,
+    /bak(?:e|ing)(?:\s*,\s*|\s+)(?:for\s+)?/i,
+    /in\s+(?:the\s+)?oven(?:\s*,\s*|\s+)(?:for\s+)?/i,
+    /at\s+\d+°[CF](?:\s*,\s*|\s+)(?:for\s+)?/i,
   ],
   fry: [
-    /fry(?:ing)?\s+(?:for\s+)?/i,
-    /deep.fry(?:ing)?\s+(?:for\s+)?/i,
+    /fry(?:ing)?(?:\s*,\s*|\s+)(?:for\s+)?/i,
+    /deep.fry(?:ing)?(?:\s*,\s*|\s+)(?:for\s+)?/i,
   ],
   saute: [
-    /sauté(?:ing)?\s+(?:for\s+)?/i,
-    /saute(?:ing)?\s+(?:for\s+)?/i,
+    /sauté(?:ing)?(?:\s*,\s*|\s+)(?:for\s+)?/i,
+    /saute(?:ing)?(?:\s*,\s*|\s+)(?:for\s+)?/i,
   ],
   roast: [
-    /roast(?:ing)?\s+(?:for\s+)?/i,
+    /roast(?:ing)?(?:\s*,\s*|\s+)(?:for\s+)?/i,
   ],
   grill: [
-    /grill(?:ing)?\s+(?:for\s+)?/i,
+    /grill(?:ing)?(?:\s*,\s*|\s+)(?:for\s+)?/i,
   ],
   steam: [
-    /steam(?:ing)?\s+(?:for\s+)?/i,
+    /steam(?:ing)?(?:\s*,\s*|\s+)(?:for\s+)?/i,
   ],
   braise: [
-    /brais(?:e|ing)\s+(?:for\s+)?/i,
+    /brais(?:e|ing)(?:\s*,\s*|\s+)(?:for\s+)?/i,
   ],
   toast: [
-    /toast(?:ing)?\s+(?:for\s+)?/i,
+    /toast(?:ing)?(?:\s*,\s*|\s+)(?:for\s+)?/i,
   ],
   marinate: [
-    /marinat(?:e|ing)\s+(?:for\s+)?/i,
+    /marinat(?:e|ing)(?:\s*,\s*|\s+)(?:for\s+)?/i,
   ],
   rise: [
-    /ris(?:e|ing)\s+(?:for\s+)?/i,
-    /proof(?:ing)?\s+(?:for\s+)?/i,
-    /let\s+(?:it\s+)?rise\s+(?:for\s+)?/i,
+    /ris(?:e|ing)(?:\s*,\s*|\s+)(?:for\s+)?/i,
+    /proof(?:ing)?(?:\s*,\s*|\s+)(?:for\s+)?/i,
+    /let\s+(?:it\s+)?rise(?:\s*,\s*|\s+)(?:for\s+)?/i,
     /doubled?\s+in\s+size/i,
   ],
   chill: [
-    /chill(?:ing)?\s+(?:for\s+)?/i,
-    /refrigerat(?:e|ing)\s+(?:for\s+)?/i,
-    /in\s+(?:the\s+)?(?:fridge|refrigerator)\s+(?:for\s+)?/i,
+    /chill(?:ing)?(?:\s*,\s*|\s+)(?:for\s+)?/i,
+    /refrigerat(?:e|ing)(?:\s*,\s*|\s+)(?:for\s+)?/i,
+    /in\s+(?:the\s+)?(?:fridge|refrigerator)(?:\s*,\s*|\s+)(?:for\s+)?/i,
   ],
   rest: [
-    /rest(?:ing)?\s+(?:for\s+)?/i,
-    /let\s+(?:it\s+)?rest\s+(?:for\s+)?/i,
-    /set\s+aside\s+(?:for\s+)?/i,
-    /cool(?:ing)?\s+(?:for\s+)?/i,
+    /rest(?:ing)?(?:\s*,\s*|\s+)(?:for\s+)?/i,
+    /let\s+(?:it\s+)?rest(?:\s*,\s*|\s+)(?:for\s+)?/i,
+    /set\s+aside(?:\s*,\s*|\s+)(?:for\s+)?/i,
+    /cool(?:ing)?(?:\s*,\s*|\s+)(?:for\s+)?/i,
   ],
   prep: [
-    /prep(?:are|aration)?\s+(?:for\s+)?/i,
-    /chop(?:ping)?\s+(?:for\s+)?/i,
-    /mix(?:ing)?\s+(?:for\s+)?/i,
-    /knead(?:ing)?\s+(?:for\s+)?/i,
+    /prep(?:are|aration)?(?:\s*,\s*|\s+)(?:for\s+)?/i,
+    /chop(?:ping)?(?:\s*,\s*|\s+)(?:for\s+)?/i,
+    /mix(?:ing)?(?:\s*,\s*|\s+)(?:for\s+)?/i,
+    /knead(?:ing)?(?:\s*,\s*|\s+)(?:for\s+)?/i,
   ],
   
   // Generic patterns - check these last
   cook: [
-    /cook(?:ing)?\s+(?:for\s+)?/i,
+    /cook(?:ing)?(?:\s*,\s*|\s+)(?:for\s+)?/i,
   ],
   heat: [
-    /(?:^|\s)heat(?:ing)?\s+(?:for\s+)?/i, // More specific - must be at start or after space
-    /warm(?:ing)?\s+(?:for\s+)?/i,
+    /(?:^|\s)heat(?:ing)?(?:\s*,\s*|\s+)(?:for\s+)?/i, // More specific - must be at start or after space
+    /warm(?:ing)?(?:\s*,\s*|\s+)(?:for\s+)?/i,
   ],
 };
 
@@ -302,25 +302,92 @@ export function detectTimersFromText(text: string): DetectedTimer[] {
           let searchStart = Math.max(0, matchStart - 150);
           const beforeText = text.slice(searchStart, matchStart);
           
+          // Look for cooking verbs that should be included in the context
+          const cookingVerbs = /\b(cook|bake|broil|simmer|boil|fry|sauté|saute|roast|grill|steam|braise|toast|heat|warm)\b/gi;
+          
+          // First, look for any cooking verbs in the area before the timer
+          const extendedBeforeText = text.slice(Math.max(0, matchStart - 150), matchStart);
+          const cookingVerbMatches = [...extendedBeforeText.matchAll(cookingVerbs)];
+          
+          let defaultContextStart = searchStart;
+          
           // Try to find sentence boundary first
           const sentenceMatch = beforeText.match(/[.!?]\s+([^.!?]*)$/);
           if (sentenceMatch && sentenceMatch[1].length > 10) {
             // Found a sentence - use it
-            contextStart = searchStart + sentenceMatch.index + sentenceMatch[0].indexOf(sentenceMatch[1]);
+            defaultContextStart = searchStart + sentenceMatch.index + sentenceMatch[0].indexOf(sentenceMatch[1]);
           } else {
-            // No good sentence boundary, look for clause boundaries
+            // Look for clause boundaries, but be careful with cooking verbs
             const clauseMatch = beforeText.match(/[,;:]\s+([^,;:.]*)$/);
             if (clauseMatch && clauseMatch[1].length > 10) {
-              contextStart = searchStart + clauseMatch.index + clauseMatch[0].indexOf(clauseMatch[1]);
+              const potentialStart = searchStart + clauseMatch.index + clauseMatch[0].indexOf(clauseMatch[1]);
+              // Check if we're cutting off a cooking verb
+              const beforeClause = text.slice(Math.max(0, potentialStart - 10), potentialStart);
+              if (cookingVerbs.test(beforeClause)) {
+                // Don't use this clause boundary, it would cut off a cooking verb
+                // Fall through to standard fallback
+                const wordMatch = beforeText.match(/\s+(\S.*)$/);
+                if (wordMatch) {
+                  defaultContextStart = searchStart + wordMatch.index + 1;
+                }
+              } else {
+                defaultContextStart = potentialStart;
+              }
             } else {
-              // Fallback: go back to find a reasonable phrase start
+              // Standard fallback
               const wordMatch = beforeText.match(/\s+(\S.*)$/);
               if (wordMatch) {
-                contextStart = searchStart + wordMatch.index + 1;
-              } else {
-                contextStart = searchStart;
+                defaultContextStart = searchStart + wordMatch.index + 1;
               }
             }
+          }
+          
+          // Now check if there's a cooking verb that should be included
+          if (cookingVerbMatches.length > 0) {
+            // Find the last cooking verb before the timer
+            const lastVerbMatch = cookingVerbMatches[cookingVerbMatches.length - 1];
+            const verbPosition = Math.max(0, matchStart - 150) + lastVerbMatch.index;
+            
+            // Check if the default context start would cut off a cooking verb
+            // This handles cases like "Cook, stirring..." where the comma causes issues
+            if (verbPosition < defaultContextStart) {
+              // Check if there's a verb right at or near the default start that would be cut off
+              const textAroundDefault = text.slice(Math.max(0, defaultContextStart - 20), defaultContextStart + 20);
+              const verbNearDefault = cookingVerbs.exec(textAroundDefault);
+              
+              if (verbNearDefault && verbNearDefault.index !== undefined && verbNearDefault.index < 20) {
+                // There's a cooking verb that would be cut off, use the verb position
+                contextStart = verbPosition;
+              } else if ((defaultContextStart - verbPosition) < 50) {
+                // The verb is reasonably close, include it
+                // Find the start of the sentence containing this cooking verb
+                const beforeVerb = text.slice(Math.max(0, verbPosition - 50), verbPosition);
+                const sentenceStart = Math.max(
+                  beforeVerb.lastIndexOf('.'),
+                  beforeVerb.lastIndexOf('!'),
+                  beforeVerb.lastIndexOf('?'),
+                  -1
+                );
+                
+                if (sentenceStart >= 0) {
+                  // Start from after the sentence boundary
+                  contextStart = verbPosition - 50 + sentenceStart + 1;
+                  // Skip any whitespace
+                  while (contextStart < verbPosition && /\s/.test(text[contextStart])) {
+                    contextStart++;
+                  }
+                } else {
+                  // No sentence boundary found, start from the cooking verb
+                  contextStart = verbPosition;
+                }
+              } else {
+                contextStart = defaultContextStart;
+              }
+            } else {
+              contextStart = defaultContextStart;
+            }
+          } else {
+            contextStart = defaultContextStart;
           }
           
           // Look forward for the end of the sentence or meaningful phrase
@@ -412,12 +479,13 @@ export function detectTimersFromText(text: string): DetectedTimer[] {
     return !timers.slice(0, index).some(existingTimer => 
       existingTimer.minutes === timer.minutes && 
       existingTimer.type === timer.type &&
-      Math.abs(existingTimer.context.length - timer.context.length) < 10
+      (Math.abs(existingTimer.context.length - timer.context.length) < 10 ||
+       Math.abs(existingTimer.contextStart - timer.contextStart) < 20)
     );
   });
   
-  // Sort by duration (shortest first)
-  return uniqueTimers.sort((a, b) => a.minutes - b.minutes);
+  // Sort by position in the text (order they appear in instructions)
+  return uniqueTimers.sort((a, b) => a.contextStart - b.contextStart);
 }
 
 export function detectTimersFromRecipe(

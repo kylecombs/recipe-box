@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, useImperativeHandle, forwardRef } from "react";
 import { Clock, ChevronDown, ChevronUp } from "lucide-react";
 import Timer from "./Timer";
 import type { DetectedTimer, TimerState } from "~/utils/time-parser";
@@ -9,12 +9,92 @@ interface TimerManagerProps {
   onContextClick?: (timer: DetectedTimer) => void;
 }
 
-export default function TimerManager({ timers, recipeId, onContextClick }: TimerManagerProps) {
+export interface TimerManagerRef {
+  scrollToTimer: (timer: DetectedTimer) => void;
+}
+
+const TimerManager = forwardRef<TimerManagerRef, TimerManagerProps>(({ timers, recipeId, onContextClick }, ref) => {
   const [timerStates, setTimerStates] = useState<Record<string, TimerState>>({});
   const [isExpanded, setIsExpanded] = useState(false);
   const [hasActiveTimers, setHasActiveTimers] = useState(false);
+  const timerManagerRef = useRef<HTMLDivElement>(null);
+  const timerRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   // Timer persistence is now handled by localStorage in individual Timer components
+
+  // Function to scroll to a specific timer
+  const scrollToTimer = useCallback((timer: DetectedTimer) => {
+    // First expand the timer manager if it's collapsed
+    if (!isExpanded) {
+      setIsExpanded(true);
+    }
+    
+    // Wait for expansion animation to complete, then scroll
+    setTimeout(() => {
+      const timerElement = timerRefs.current.get(timer.id);
+      if (timerElement) {
+        timerElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center'
+        });
+        
+        // Add a prominent highlight effect to the timer
+        // First, create a highlight overlay
+        const highlight = document.createElement('div');
+        highlight.style.position = 'absolute';
+        highlight.style.inset = '0';
+        highlight.style.backgroundColor = '#ffde87';
+        highlight.style.borderRadius = '0.5rem';
+        highlight.style.opacity = '0';
+        highlight.style.pointerEvents = 'none';
+        highlight.style.transition = 'opacity 0.3s ease-in-out';
+        
+        // Position the timer element relatively if not already
+        const originalPosition = timerElement.style.position;
+        if (!originalPosition || originalPosition === 'static') {
+          timerElement.style.position = 'relative';
+        }
+        
+        // Add the highlight
+        timerElement.appendChild(highlight);
+        
+        // Animate the highlight
+        requestAnimationFrame(() => {
+          highlight.style.opacity = '0.4';
+          
+          // Also add a scale effect to the timer itself
+          timerElement.style.transition = 'transform 0.3s ease';
+          timerElement.style.transform = 'scale(1.05)';
+          
+          // Start fading out after a brief pause
+          setTimeout(() => {
+            highlight.style.opacity = '0';
+            timerElement.style.transform = '';
+            
+            // Clean up after animation completes
+            setTimeout(() => {
+              highlight.remove();
+              if (!originalPosition || originalPosition === 'static') {
+                timerElement.style.position = '';
+              }
+              timerElement.style.transition = '';
+            }, 300);
+          }, 600);
+        });
+      } else if (timerManagerRef.current) {
+        // Fallback: scroll to timer manager
+        timerManagerRef.current.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start'
+        });
+      }
+    }, isExpanded ? 0 : 300); // Wait for expansion if needed
+  }, [isExpanded]);
+
+  // Expose scrollToTimer to parent components
+  useImperativeHandle(ref, () => ({
+    scrollToTimer
+  }));
 
   // Check for active timers in localStorage on mount and expand if found
   useEffect(() => {
@@ -87,7 +167,7 @@ export default function TimerManager({ timers, recipeId, onContextClick }: Timer
   ).length;
 
   return (
-    <div className="bg-white rounded-lg shadow-md border mb-8">
+    <div ref={timerManagerRef} className="bg-white rounded-lg shadow-md border mb-8">
       {/* Header */}
       <div
         onClick={() => setIsExpanded(!isExpanded)}
@@ -145,13 +225,23 @@ export default function TimerManager({ timers, recipeId, onContextClick }: Timer
         <div className="p-4 pt-0 border-t border-gray-100">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {timers.map(timer => (
-              <Timer
+              <div
                 key={timer.id}
-                timer={timer}
-                initialState={timerStates[timer.id]}
-                onStateChange={handleTimerStateChange}
-                onContextClick={onContextClick}
-              />
+                ref={(el) => {
+                  if (el) {
+                    timerRefs.current.set(timer.id, el);
+                  } else {
+                    timerRefs.current.delete(timer.id);
+                  }
+                }}
+              >
+                <Timer
+                  timer={timer}
+                  initialState={timerStates[timer.id]}
+                  onStateChange={handleTimerStateChange}
+                  onContextClick={onContextClick}
+                />
+              </div>
             ))}
           </div>
           
@@ -170,4 +260,8 @@ export default function TimerManager({ timers, recipeId, onContextClick }: Timer
       )}
     </div>
   );
-}
+});
+
+TimerManager.displayName = 'TimerManager';
+
+export default TimerManager;

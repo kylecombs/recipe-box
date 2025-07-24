@@ -109,7 +109,7 @@ export default function Timer({ timer, onStateChange, initialState, onContextCli
     }
     
     setIsInitialized(true);
-  }, []); // Only run once on mount
+  }, [initialState, pausedStorageKey, storageKey, totalDurationMs]); // Only run once on mount
 
   // Timer countdown effect - only start after initialization
   useEffect(() => {
@@ -160,6 +160,21 @@ export default function Timer({ timer, onStateChange, initialState, onContextCli
     };
   }, [isInitialized, timerData.isRunning, timerData.isPaused, storageKey, timer.label, timer.type]);
 
+  const handleReset = useCallback(() => {
+    // Clear all localStorage for this timer
+    removeLocalStorageValue(storageKey);
+    removeLocalStorageValue(pausedStorageKey);
+
+    const resetTime = Math.floor(totalDurationMs / 1000);
+    setRemainingTime(resetTime);
+    setTimerData({
+      date: Date.now(),
+      delay: totalDurationMs,
+      isRunning: false,
+      isPaused: false,
+    });
+  }, [storageKey, pausedStorageKey, totalDurationMs]);
+
   // Update parent component when state changes
   useEffect(() => {
     if (onStateChange && isInitialized) {
@@ -201,7 +216,7 @@ export default function Timer({ timer, onStateChange, initialState, onContextCli
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
-  }, [remainingTime, storageKey, pausedStorageKey]);
+  }, [remainingTime, storageKey, pausedStorageKey, handleReset]);
 
   const handlePause = useCallback(() => {
     // Save paused state with remaining time
@@ -220,21 +235,6 @@ export default function Timer({ timer, onStateChange, initialState, onContextCli
       isPaused: true,
     }));
   }, [remainingTime, storageKey, pausedStorageKey]);
-
-  const handleReset = useCallback(() => {
-    // Clear all localStorage for this timer
-    removeLocalStorageValue(storageKey);
-    removeLocalStorageValue(pausedStorageKey);
-
-    const resetTime = Math.floor(totalDurationMs / 1000);
-    setRemainingTime(resetTime);
-    setTimerData({
-      date: Date.now(),
-      delay: totalDurationMs,
-      isRunning: false,
-      isPaused: false,
-    });
-  }, [storageKey, pausedStorageKey, totalDurationMs]);
 
   const formatTime = (seconds: number): string => {
     const hours = Math.floor(seconds / 3600);
@@ -277,7 +277,7 @@ export default function Timer({ timer, onStateChange, initialState, onContextCli
   };
 
   return (
-    <div className={`rounded-lg border p-4 transition-colors ${getBackgroundColor()}`}>
+    <div className={`rounded-lg border p-4 transition-colors h-full ${getBackgroundColor()}`}>
       {/* Hidden audio element for notification */}
       <audio
         ref={audioRef}
@@ -376,6 +376,14 @@ export default function Timer({ timer, onStateChange, initialState, onContextCli
               : ''
           }`}
           onClick={() => onContextClick && timer.contextStart !== -1 && onContextClick(timer)}
+          onKeyDown={onContextClick && timer.contextStart !== -1 ? (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onContextClick(timer);
+            }
+          } : undefined}
+          role={onContextClick && timer.contextStart !== -1 ? "button" : undefined}
+          tabIndex={onContextClick && timer.contextStart !== -1 ? 0 : undefined}
           title={onContextClick && timer.contextStart !== -1 ? "Click to jump to this part of the recipe" : undefined}
         >
           <strong>Context:</strong> {timer.context}

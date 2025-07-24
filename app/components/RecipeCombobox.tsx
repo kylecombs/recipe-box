@@ -127,7 +127,7 @@ export function RecipeCombobox({
             <div className="sticky top-0 bg-gray-50 border-b border-gray-200 px-3 py-2">
               <div className="flex items-center text-sm text-gray-600">
                 <Search className="h-4 w-4 mr-2" />
-                <span>Searching for "{searchTerm}"</span>
+                <span>Searching for &quot;{searchTerm}&quot;</span>
               </div>
             </div>
           )}
@@ -171,10 +171,10 @@ export function RecipeCombobox({
               >
                 <div className="flex items-center text-sm text-gray-900">
                   <Plus className="h-4 w-4 mr-2 text-green-600" />
-                  <span>Add "{searchTerm}" as custom text</span>
+                  <span>Add &quot;{searchTerm}&quot; as custom text</span>
                 </div>
                 <div className="text-xs text-gray-500 ml-6">
-                  This won't link to a recipe
+                  This won&apos;t link to a recipe
                 </div>
               </button>
             </div>
@@ -189,7 +189,7 @@ export function RecipeCombobox({
 
           {filteredRecipes.length === 0 && searchTerm && (
             <div className="px-3 py-4 text-sm text-gray-500 text-center">
-              No recipes found for "{searchTerm}"
+              No recipes found for &quot;{searchTerm}&quot;
               <br />
               Use the custom entry option above
             </div>

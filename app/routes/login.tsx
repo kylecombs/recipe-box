@@ -78,7 +78,6 @@ export default function LoginPage() {
               <input
                 id="email"
                 required
-                autoFocus={true}
                 name="email"
                 type="email"
                 autoComplete="email"
@@ -128,7 +127,7 @@ export default function LoginPage() {
           </button>
           <div className="flex items-center justify-between">
             <div className="text-center text-sm text-gray-500">
-              Don't have an account?{" "}
+              Don&apos;t have an account?{" "}
               <Link
                 className="text-blue-500 underline"
                 to={{

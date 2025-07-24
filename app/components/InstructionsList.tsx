@@ -1,4 +1,4 @@
-import { useRef, createRef, useEffect } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import HighlightableText, { type HighlightableTextRef } from "./HighlightableText";
 import type { DetectedTimer } from "~/utils/time-parser";
 
@@ -13,19 +13,21 @@ interface InstructionsListProps {
   timers?: DetectedTimer[];
   recipeTitle?: string;
   recipeDescription?: string;
+  onTimerClick?: (timer: DetectedTimer) => void;
 }
 
 export default function InstructionsList({ 
   instructions, 
   timers = [], 
   recipeTitle = "", 
-  recipeDescription = "" 
+  recipeDescription = "",
+  onTimerClick
 }: InstructionsListProps) {
   const highlightRefs = useRef<Map<string, HighlightableTextRef>>(new Map());
   
   // Calculate the cumulative text offset to map timer positions to instructions
   // This must match exactly how text is joined in detectTimersFromRecipe
-  const getCumulativeTextOffset = (stepIndex: number) => {
+  const getCumulativeTextOffset = useCallback((stepIndex: number) => {
     const sortedInstructions = instructions.sort((a, b) => a.stepNumber - b.stepNumber);
     
     // Start with title and description (joined with spaces)
@@ -39,11 +41,11 @@ export default function InstructionsList({
     }
     
     return offset;
-  };
+  }, [instructions, recipeTitle, recipeDescription]);
 
   // Create a global function to handle timer scrolling
   useEffect(() => {
-    (window as any).scrollToTimerInInstructions = (timer: DetectedTimer) => {
+    (window as typeof window & { scrollToTimerInInstructions?: (timer: DetectedTimer) => void }).scrollToTimerInInstructions = (timer: DetectedTimer) => {
       // Find which instruction contains this timer
       const sortedInstructions = instructions.sort((a, b) => a.stepNumber - b.stepNumber);
       
@@ -68,9 +70,9 @@ export default function InstructionsList({
     };
     
     return () => {
-      delete (window as any).scrollToTimerInInstructions;
+      delete (window as typeof window & { scrollToTimerInInstructions?: (timer: DetectedTimer) => void }).scrollToTimerInInstructions;
     };
-  }, [instructions, timers, recipeTitle, recipeDescription]);
+  }, [instructions, timers, recipeTitle, recipeDescription, getCumulativeTextOffset]);
 
   // Filter timers for each instruction based on position
   const getTimersForInstruction = (instruction: Instruction, stepIndex: number) => {
@@ -114,6 +116,7 @@ export default function InstructionsList({
                   text={instruction.description}
                   timers={instructionTimers}
                   className="leading-relaxed"
+                  onTimerClick={onTimerClick}
                 />
               </div>
             </li>

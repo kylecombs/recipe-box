@@ -55,7 +55,8 @@ export default function RatingForm({
 
   // Handle successful submission
   useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data?.success && hasChanged) {
+    const data = fetcher.data as { success?: boolean; error?: string };
+    if (fetcher.state === "idle" && data.success && hasChanged) {
       setHasChanged(false);
       if (onClose) {
         onClose();
@@ -100,9 +101,9 @@ export default function RatingForm({
 
       <fetcher.Form onSubmit={handleSubmit} className="space-y-3">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <div className="block text-sm font-medium text-gray-700 mb-2">
             Rating *
-          </label>
+          </div>
           <StarRating
             rating={rating}
             onRatingChange={setRating}
@@ -123,10 +124,11 @@ export default function RatingForm({
             </button>
           ) : (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Comment (optional)
+              <label htmlFor="ratingComment" className="block text-sm font-medium text-gray-700 mb-2">
+                Comment (optional)  
               </label>
               <textarea
+                id="ratingComment"
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
                 rows={3}
@@ -147,9 +149,9 @@ export default function RatingForm({
           )}
         </div>
 
-        {fetcher.data?.error && (
+        {(fetcher.data as { error?: string })?.error && (
           <div className="text-red-600 text-sm">
-            {fetcher.data.error}
+            {(fetcher.data as { error?: string }).error}
           </div>
         )}
 

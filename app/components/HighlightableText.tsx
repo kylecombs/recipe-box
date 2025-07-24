@@ -5,6 +5,7 @@ interface HighlightableTextProps {
   text: string;
   timers: DetectedTimer[];
   className?: string;
+  onTimerClick?: (timer: DetectedTimer) => void;
 }
 
 export interface HighlightableTextRef {
@@ -12,7 +13,7 @@ export interface HighlightableTextRef {
 }
 
 const HighlightableText = forwardRef<HighlightableTextRef, HighlightableTextProps>(
-  ({ text, timers, className = "" }, ref) => {
+  ({ text, timers, className = "", onTimerClick }, ref) => {
     const textRef = useRef<HTMLDivElement>(null);
     const [highlightedTimer, setHighlightedTimer] = useState<string | null>(null);
 
@@ -107,6 +108,16 @@ const HighlightableText = forwardRef<HighlightableTextRef, HighlightableTextProp
 
     const segments = createTextSegments();
 
+    // Handle clicking on a timer segment
+    const handleTimerClick = useCallback((segment: typeof segments[0]) => {
+      if (segment.isHighlight && segment.timerId && onTimerClick) {
+        const timer = timers.find(t => t.id === segment.timerId);
+        if (timer) {
+          onTimerClick(timer);
+        }
+      }
+    }, [timers, onTimerClick]);
+
     return (
       <div ref={textRef} className={className}>
         {segments.map((segment, index) => (
@@ -121,11 +132,15 @@ const HighlightableText = forwardRef<HighlightableTextRef, HighlightableTextProp
                   }`
                 : ''
             }`}
-            style={{
-              animation: highlightedTimer === segment.timerId 
-                ? 'pulse 0.5s ease-in-out 3 alternate' 
-                : undefined
-            }}
+            onClick={() => handleTimerClick(segment)}
+            onKeyDown={segment.isHighlight ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleTimerClick(segment);
+              }
+            } : undefined}
+            role={segment.isHighlight ? "button" : undefined}
+            tabIndex={segment.isHighlight ? 0 : undefined}
           >
             {segment.text}
           </span>
