@@ -13,7 +13,7 @@ import GroceryListModal from "~/components/GroceryListModal";
 import StarRating from "~/components/StarRating";
 import RatingForm from "~/components/RatingForm";
 import TimerManager, { type TimerManagerRef } from "~/components/TimerManager";
-import { detectTimersFromRecipe } from "~/utils/time-parser";
+import { detectTimersFromRecipe, DetectedTimer } from "~/utils/time-parser";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const userId = await requireUserId(request);
@@ -1053,8 +1053,9 @@ export default function RecipeDetail() {
           recipeId={recipe.id}
           onContextClick={(timer) => {
             // Scroll to the timer context in the instructions
-            if ((window as any).scrollToTimerInInstructions) {
-              (window as any).scrollToTimerInInstructions(timer);
+            const scrollFunction = (window as unknown as { scrollToTimerInInstructions?: (timer: DetectedTimer) => void }).scrollToTimerInInstructions;
+            if (scrollFunction) {
+              scrollFunction(timer);
             }
           }}
         />
