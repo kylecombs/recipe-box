@@ -229,7 +229,7 @@ const TimerManager = forwardRef<TimerManagerRef, TimerManagerProps>(({ timers, r
       {/* Timer Grid */}
       {isExpanded && (
         <div className="p-4 pt-0 border-t border-gray-100">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
             {timers.map(timer => (
               <div
                 key={timer.id}

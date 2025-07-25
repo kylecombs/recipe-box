@@ -10,6 +10,9 @@ export interface DetectedTimer {
   contextEnd: number;   // End position of context in original text
   timerStart: number;   // Start position of timer text within context
   timerEnd: number;     // End position of timer text within context
+  // Range information if time is specified as a range (e.g., "7-10 minutes")
+  minMinutes?: number;
+  maxMinutes?: number;
 }
 
 export interface TimerState {
@@ -154,12 +157,12 @@ function parseFraction(fraction: string): number {
 function parseTimeToMinutes(
   match: RegExpMatchArray, 
   patternIndex: number
-): number {
+): { minutes: number; minMinutes?: number; maxMinutes?: number } {
   
   // Handle overnight, all day - but return 0 to exclude these from timer creation
   if (patternIndex === TIME_PATTERNS.length - 1) {
     // These are long-duration activities that aren't suitable for active timers
-    return 0; // Return 0 to exclude from timer creation
+    return { minutes: 0 }; // Return 0 to exclude from timer creation
   }
   
   // Handle word numbers
@@ -168,15 +171,15 @@ function parseTimeToMinutes(
     const unit = match[2];
     const value = WORD_TO_NUMBER[word] || 1;
     
-    if (unit.startsWith('h')) return value * 60;
-    return value;
+    const minutes = unit.startsWith('h') ? value * 60 : value;
+    return { minutes };
   }
   
   // Handle digital format (1:30)
   if (patternIndex === TIME_PATTERNS.length - 3) {
     const hours = parseInt(match[1] || '0');
     const minutes = parseInt(match[2] || '0');
-    return hours * 60 + minutes;
+    return { minutes: hours * 60 + minutes };
   }
   
   // Handle fractional formats
@@ -186,19 +189,23 @@ function parseTimeToMinutes(
     const unit = match[3];
     const value = whole + fraction;
     
-    if (unit.toLowerCase().startsWith('h')) return value * 60;
-    return value;
+    const minutes = unit.toLowerCase().startsWith('h') ? value * 60 : value;
+    return { minutes };
   }
   
-  // Handle range formats (take the average)
+  // Handle range formats (capture both min and max values)
   if (patternIndex === TIME_PATTERNS.length - 5) {
     const min = parseFloat(match[1]);
     const max = parseFloat(match[2]);
     const unit = match[3];
-    const value = (min + max) / 2;
+    const averageValue = (min + max) / 2;
     
-    if (unit.toLowerCase().startsWith('h')) return value * 60;
-    return value;
+    const isHours = unit.toLowerCase().startsWith('h');
+    const minutes = isHours ? averageValue * 60 : averageValue;
+    const minMinutes = isHours ? min * 60 : min;
+    const maxMinutes = isHours ? max * 60 : max;
+    
+    return { minutes, minMinutes, maxMinutes };
   }
   
   // Handle standard formats and minutes only
@@ -208,14 +215,14 @@ function parseTimeToMinutes(
     
     if (patternIndex === 0) {
       // Hours and minutes format
-      return first * 60 + second;
+      return { minutes: first * 60 + second };
     } else {
       // Minutes only
-      return first;
+      return { minutes: first };
     }
   }
   
-  return 0;
+  return { minutes: 0 };
 }
 
 // Determine timer type from context
@@ -236,11 +243,26 @@ function createTimerLabel(
   originalText: string, 
   context: string, 
   type: DetectedTimer['type'], 
-  minutes: number
+  minutes: number,
+  minMinutes?: number,
+  maxMinutes?: number
 ): string {
-  const timeStr = minutes >= 60 
-    ? `${Math.floor(minutes / 60)}h ${minutes % 60 > 0 ? `${minutes % 60}m` : ''}`.trim()
-    : `${minutes}m`;
+  let timeStr: string;
+  
+  if (minMinutes !== undefined && maxMinutes !== undefined && minMinutes !== maxMinutes) {
+    // Display range
+    const formatTime = (mins: number) => {
+      return mins >= 60 
+        ? `${Math.floor(mins / 60)}h${mins % 60 > 0 ? ` ${mins % 60}m` : ''}`
+        : `${mins}m`;
+    };
+    timeStr = `${formatTime(minMinutes)}-${formatTime(maxMinutes)}`;
+  } else {
+    // Display single time
+    timeStr = minutes >= 60 
+      ? `${Math.floor(minutes / 60)}h ${minutes % 60 > 0 ? `${minutes % 60}m` : ''}`.trim()
+      : `${minutes}m`;
+  }
   
   // Labels that correspond directly to the specific cooking verbs
   const typeLabels: Record<DetectedTimer['type'], string> = {
@@ -278,7 +300,8 @@ export function detectTimersFromText(text: string): DetectedTimer[] {
     pattern.lastIndex = 0; // Reset regex state
     
     while ((match = pattern.exec(text)) !== null) {
-      const minutes = parseTimeToMinutes(match, patternIndex);
+      const timeResult = parseTimeToMinutes(match, patternIndex);
+      const { minutes, minMinutes, maxMinutes } = timeResult;
       
       if (minutes > 0 && minutes <= 1440) { // Max 24 hours
         const matchStart = match.index;
@@ -442,7 +465,7 @@ export function detectTimersFromText(text: string): DetectedTimer[] {
           context = context.replace(/^[,;:]\s*/, '');
           
           const type = determineTimerType(context);
-          const label = createTimerLabel(match[0], context, type, minutes);
+          const label = createTimerLabel(match[0], context, type, minutes, minMinutes, maxMinutes);
           
           // Calculate timer position within the context
           const timerInContextStart = context.indexOf(match[0]);
@@ -462,6 +485,9 @@ export function detectTimersFromText(text: string): DetectedTimer[] {
             contextEnd,
             timerStart: timerInContextStart,
             timerEnd: timerInContextEnd,
+            // Range information if available
+            ...(minMinutes !== undefined && { minMinutes }),
+            ...(maxMinutes !== undefined && { maxMinutes }),
           };
           
           timers.push(timer);
@@ -501,21 +527,21 @@ export function detectTimersFromRecipe(
   // Add cook time from recipe metadata (but not prep time)
   const metadataTimers: DetectedTimer[] = [];
   
-  if (cookTime && cookTime > 0) {
-    metadataTimers.push({
-      id: recipeId ? `${recipeId}-cook-time-${cookTime}` : `cook-time-${cookTime}`,
-      label: `Cook Time (${cookTime}m)`,
-      minutes: cookTime,
-      originalText: `${cookTime} minutes`,
-      context: 'Recipe cooking time',
-      type: 'cook',
-      // Metadata timers don't have specific text positions
-      contextStart: -1,
-      contextEnd: -1,
-      timerStart: -1,
-      timerEnd: -1,
-    });
-  }
+  // if (cookTime && cookTime > 0) {
+  //   metadataTimers.push({
+  //     id: recipeId ? `${recipeId}-cook-time-${cookTime}` : `cook-time-${cookTime}`,
+  //     label: `Cook Time (${cookTime}m)`,
+  //     minutes: cookTime,
+  //     originalText: `${cookTime} minutes`,
+  //     context: 'Recipe cooking time',
+  //     type: 'cook',
+  //     // Metadata timers don't have specific text positions
+  //     contextStart: -1,
+  //     contextEnd: -1,
+  //     timerStart: -1,
+  //     timerEnd: -1,
+  //   });
+  // }
   
   // Combine and deduplicate
   const allTimers = [...metadataTimers, ...detectedTimers];

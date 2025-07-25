@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Play, Pause, RotateCcw, Clock, AlertCircle } from "lucide-react";
+import { Play, Pause, RotateCcw, Clock, AlertCircle, Edit3, Save, X } from "lucide-react";
 import type { DetectedTimer, TimerState } from "~/utils/time-parser";
 
 interface TimerProps {
@@ -22,9 +22,27 @@ const formatTime = (seconds: number): string => {
 };
 
 export default function Timer({ timer, onStateChange, initialState, onContextClick }: TimerProps) {
-  const totalDurationMs = timer.minutes * 60 * 1000; // Convert to milliseconds
+  // Helper function to get value from localStorage
+  const getLocalStorageValue = (key: string): string | null => {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem(key);
+  };
+
+  // Custom timer duration from localStorage (overrides original timer.minutes)
+  const getCustomDuration = () => {
+    const customKey = `timer_custom_${timer.id}`;
+    const saved = getLocalStorageValue(customKey);
+    return saved ? parseInt(saved, 10) : timer.minutes;
+  };
+
+  const [customMinutes, setCustomMinutes] = useState(getCustomDuration());
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState('');
+  
+  const totalDurationMs = customMinutes * 60 * 1000; // Convert to milliseconds
   const storageKey = `timer_${timer.id}`;
   const pausedStorageKey = `${storageKey}_paused`;
+  const customStorageKey = `timer_custom_${timer.id}`;
   
   // State for timer control (minimal, only for UI updates)
   const [timerState, setTimerState] = useState({
@@ -47,12 +65,6 @@ export default function Timer({ timer, onStateChange, initialState, onContextCli
     endTime: 0,
     lastUpdateTime: 0,
   });
-
-  // Helper function to get value from localStorage
-  const getLocalStorageValue = (key: string): string | null => {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem(key);
-  };
 
   // Helper function to set value in localStorage
   const setLocalStorageValue = (key: string, value: string): void => {
@@ -352,12 +364,74 @@ export default function Timer({ timer, onStateChange, initialState, onContextCli
     updateTimerDisplay(timerDataRef.current.remainingTime, false, true, false);
   }, [storageKey, pausedStorageKey, updateTimerDisplay]);
 
+  // Edit timer duration functionality
+  const handleEditStart = useCallback(() => {
+    setEditValue(customMinutes.toString());
+    setIsEditing(true);
+  }, [customMinutes]);
+
+  const handleEditSave = useCallback(() => {
+    const newMinutes = parseInt(editValue, 10);
+    if (newMinutes > 0 && newMinutes <= 1440) { // Max 24 hours
+      setCustomMinutes(newMinutes);
+      setLocalStorageValue(customStorageKey, newMinutes.toString());
+      
+      // Reset timer with new duration
+      const newDurationMs = newMinutes * 60 * 1000;
+      const resetTime = Math.floor(newDurationMs / 1000);
+      timerDataRef.current.remainingTime = resetTime;
+      timerDataRef.current.endTime = 0;
+      
+      // Clear any running/paused state
+      removeLocalStorageValue(storageKey);
+      removeLocalStorageValue(pausedStorageKey);
+      
+      setTimerState({
+        isRunning: false,
+        isPaused: false,
+        isCompleted: false,
+      });
+      
+      updateTimerDisplay(resetTime, false, false, false);
+    }
+    setIsEditing(false);
+  }, [editValue, customStorageKey, storageKey, pausedStorageKey, updateTimerDisplay]);
+
+  const handleEditCancel = useCallback(() => {
+    setIsEditing(false);
+    setEditValue('');
+  }, []);
+
   const getTypeIcon = () => {
     const iconProps = { size: 16, className: "mr-2" };
     
     // All timer types use the Clock icon for now
     // Could be enhanced later with specific icons for different cooking methods
     return <Clock {...iconProps} />;
+  };
+
+  // Create custom label with updated duration
+  const getCustomLabel = () => {
+    const baseLabel = timer.label.split('(')[0].trim(); // Get just the action part
+    
+    // Format time display
+    let timeStr: string;
+    if (timer.minMinutes !== undefined && timer.maxMinutes !== undefined && timer.minMinutes !== timer.maxMinutes) {
+      // Show original range
+      const formatTime = (mins: number) => {
+        return mins >= 60 
+          ? `${Math.floor(mins / 60)}h${mins % 60 > 0 ? ` ${mins % 60}m` : ''}`
+          : `${mins}m`;
+      };
+      timeStr = `${formatTime(timer.minMinutes)}-${formatTime(timer.maxMinutes)}`;
+    } else {
+      // Show current custom duration
+      timeStr = customMinutes >= 60 
+        ? `${Math.floor(customMinutes / 60)}h ${customMinutes % 60 > 0 ? `${customMinutes % 60}m` : ''}`.trim()
+        : `${customMinutes}m`;
+    }
+    
+    return `${baseLabel} (${timeStr})`;
   };
 
   return (
@@ -372,14 +446,57 @@ export default function Timer({ timer, onStateChange, initialState, onContextCli
       </audio>
       
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center">
+        <div className="flex items-center flex-1">
           {getTypeIcon()}
-          <div>
-            <h4 className="font-medium text-gray-900">{timer.label}</h4>
-            <p className="text-xs text-gray-500 capitalize">
-              {timer.type}
-              {timerState.isPaused && " • Paused"}
-            </p>
+          <div className="flex-1">
+            {isEditing ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="min"
+                  min="1"
+                  max="1440"
+                  autoFocus
+                />
+                <span className="text-sm text-gray-600">minutes</span>
+                <button
+                  onClick={handleEditSave}
+                  className="p-1 text-green-600 hover:text-green-700"
+                  title="Save"
+                >
+                  <Save size={14} />
+                </button>
+                <button
+                  onClick={handleEditCancel}
+                  className="p-1 text-gray-600 hover:text-gray-700"
+                  title="Cancel"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-medium text-gray-900">{getCustomLabel()}</h4>
+                  <button
+                    onClick={handleEditStart}
+                    disabled={timerState.isRunning}
+                    className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Edit timer duration"
+                  >
+                    <Edit3 size={14} />
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 capitalize">
+                  {timer.type}
+                  {timerState.isPaused && " • Paused"}
+                  {customMinutes !== timer.minutes && " • Custom"}
+                </p>
+              </>
+            )}
           </div>
         </div>
         

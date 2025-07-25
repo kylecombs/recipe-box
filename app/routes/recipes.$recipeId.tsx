@@ -14,6 +14,9 @@ import StarRating from "~/components/StarRating";
 import RatingForm from "~/components/RatingForm";
 import TimerManager, { type TimerManagerRef } from "~/components/TimerManager";
 import { detectTimersFromRecipe, DetectedTimer } from "~/utils/time-parser";
+import { getRecipeNutrition } from "~/utils/nutrition-storage.server";
+import NutritionFacts from "~/components/NutritionFacts";
+import type { RecipeNutrition } from "~/utils/nutrition.server";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const userId = await requireUserId(request);
@@ -83,7 +86,15 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     _count: { rating: true },
   });
 
-  return json({ recipe, groceryLists, notes, userRating, ratingStats });
+  // Check for cached nutrition data only (don't block page load with analysis)
+  let nutrition = null;
+  try {
+    nutrition = await getRecipeNutrition(recipeId);
+  } catch (error) {
+    console.error('Failed to get cached nutrition:', error);
+  }
+
+  return json({ recipe, groceryLists, notes, userRating, ratingStats, nutrition });
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
@@ -460,11 +471,15 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 };
 
 export default function RecipeDetail() {
-  const { recipe, groceryLists, notes, userRating, ratingStats } = useLoaderData<typeof loader>();
+  const { recipe, groceryLists, notes, userRating, ratingStats, nutrition: initialNutrition } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const [isEditing, setIsEditing] = useState(false);
   const isSubmitting = navigation.state === "submitting";
+  
+  // Async nutrition loading state
+  const [nutrition, setNutrition] = useState<RecipeNutrition | null>(initialNutrition);
+  const [isLoadingNutrition, setIsLoadingNutrition] = useState(false);
   
   // Initialize ingredients and instructions state for editing
   const [editableIngredients, setEditableIngredients] = useState(recipe.ingredients);
@@ -477,6 +492,7 @@ export default function RecipeDetail() {
   const [selectedGroceryListId, setSelectedGroceryListId] = useState<string>('');
   const [newGroceryListName, setNewGroceryListName] = useState('');
   const [showRatingForm, setShowRatingForm] = useState(false);
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
 
   // Refs for timer functionality
   const timerManagerRef = useRef<TimerManagerRef>(null);
@@ -525,6 +541,44 @@ export default function RecipeDetail() {
       setImagePreview(null);
     }
   }, [isEditing, recipe.ingredients, recipe.instructionSteps]);
+  
+  // Function to load nutrition data when user requests it
+  const loadNutritionData = async () => {
+    if (recipe.ingredients.length === 0) {
+      setToast({ message: 'Recipe must have ingredients to analyze nutrition', type: 'error' });
+      return;
+    }
+    
+    setIsLoadingNutrition(true);
+    
+    try {
+      const response = await fetch('/api/nutrition', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ recipeId: recipe.id }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.nutrition) {
+          setNutrition({
+            ...data.nutrition,
+            lastAnalyzed: new Date(data.nutrition.lastAnalyzed)
+          });
+        }
+      } else {
+        console.warn('Failed to load nutrition data:', response.statusText);
+        setToast({ message: 'Failed to analyze nutrition', type: 'error' });
+      }
+    } catch (error) {
+      console.error('Error loading nutrition data:', error);
+      setToast({ message: 'Error analyzing nutrition', type: 'error' });
+    } finally {
+      setIsLoadingNutrition(false);
+    }
+  };
   
   const addIngredient = () => {
     setEditableIngredients([...editableIngredients, {
@@ -931,7 +985,46 @@ export default function RecipeDetail() {
               </div>
               
               {recipe.description && (
-                <p className="text-gray-600 text-lg mb-4">{recipe.description}</p>
+                <div className="mb-4">
+                  <p className="text-gray-600 text-lg">
+                    {(() => {
+                      const lines = recipe.description.split('\n');
+                      const isLong = lines.length > 8 || recipe.description.length > 800;
+                      
+                      if (isLong && !isDescriptionExpanded) {
+                        // Find approximately where the 10th line would be
+                        const truncatedLines = lines.slice(0, 8);
+                        const truncatedText = truncatedLines.join('\n');
+                        
+                        // If the truncated text is still very long, further truncate by character count
+                        const displayText = truncatedText.length > 500 
+                          ? truncatedText.substring(0, 500).trim() + '...'
+                          : truncatedText + (lines.length > 8 ? '...' : '');
+                        
+                        return displayText;
+                      }
+                      
+                      return recipe.description;
+                    })()}
+                  </p>
+                  {(() => {
+                    const lines = recipe.description.split('\n');
+                    const isLong = lines.length > 10 || recipe.description.length > 800;
+                    
+                    if (isLong) {
+                      return (
+                        <button
+                          onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
+                          className="text-sm text-blue-600 hover:text-blue-800 mt-2"
+                        >
+                          {isDescriptionExpanded ? 'Read Less' : 'Read More'}
+                        </button>
+                      );
+                    }
+                    
+                    return null;
+                  })()}
+                </div>
               )}
               
               {/* Recipe Meta */}
@@ -1044,6 +1137,34 @@ export default function RecipeDetail() {
           </div>
         )}
       </div>
+
+      {/* Nutrition Facts */}
+              {nutrition && (
+                <div className="mb-4">
+                  <NutritionFacts nutrition={{
+                    ...nutrition,
+                    lastAnalyzed: new Date(nutrition.lastAnalyzed)
+                  }} />
+                </div>
+              )}
+              {!nutrition && !isLoadingNutrition && recipe.ingredients.length > 0 && (
+                <div className="mb-4">
+                  <button
+                    onClick={loadNutritionData}
+                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Get Nutrition Info
+                  </button>
+                </div>
+              )}
+              {isLoadingNutrition && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+                  <div className="flex items-center space-x-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                    <span className="text-sm text-gray-600">Analyzing nutrition...</span>
+                  </div>
+                </div>
+              )}
 
       {/* Timers - Only show when not editing */}
       {!isEditing && detectedTimers.length > 0 && (
