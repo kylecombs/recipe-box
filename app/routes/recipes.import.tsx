@@ -224,7 +224,7 @@ export default function ImportRecipe() {
   }, []);
   
   return (
-    <div className="max-w-md mx-auto bg-white p-6 rounded-lg shadow-md">
+    <div className="max-w-md mx-auto bg-white p-6 rounded-lg shadow-md mt-12">
       <h1 className="text-2xl font-bold mb-6">Import Recipe</h1>
       
       {/* Tab buttons */}

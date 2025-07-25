@@ -659,10 +659,20 @@ function getImageUrl(image: unknown): string | undefined {
   return undefined;
 }
 
+// Blocked tags that should not be created during recipe imports
+const BLOCKED_TAGS = ['web', 'website', 'online', 'internet', 'www'];
+
 function parseKeywords(keywords: unknown): string[] {
-  if (Array.isArray(keywords)) return keywords.filter((item): item is string => typeof item === 'string');
+  if (Array.isArray(keywords)) {
+    return keywords
+      .filter((item): item is string => typeof item === 'string')
+      .filter(tag => !BLOCKED_TAGS.includes(tag.toLowerCase()));
+  }
   if (typeof keywords === 'string') {
-    return keywords.split(',').map(k => k.trim()).filter(Boolean);
+    return keywords.split(',')
+      .map(k => k.trim())
+      .filter(Boolean)
+      .filter(tag => !BLOCKED_TAGS.includes(tag.toLowerCase()));
   }
   return [];
 }
@@ -677,7 +687,9 @@ function generateSmartTags(document: Document, title: string, description: strin
     if (content) {
       content.split(',').forEach(tag => {
         const cleanTag = tag.trim().toLowerCase();
-        if (cleanTag) tags.add(cleanTag);
+        if (cleanTag && !BLOCKED_TAGS.includes(cleanTag)) {
+          tags.add(cleanTag);
+        }
       });
     }
   });
@@ -762,6 +774,8 @@ function generateSmartTags(document: Document, title: string, description: strin
     }
   });
   
-  // Convert to array and limit to reasonable number
-  return Array.from(tags).slice(0, 10);
+  // Convert to array, filter out unwanted tags, and limit to reasonable number
+  return Array.from(tags)
+    .filter(tag => !BLOCKED_TAGS.includes(tag.toLowerCase()))
+    .slice(0, 10);
 }

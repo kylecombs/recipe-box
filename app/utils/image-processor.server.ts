@@ -313,7 +313,11 @@ function generateTagsFromRecipe(recipe: ExtractedRecipeData): string[] {
     }
   }
   
-  return Array.from(tags).slice(0, 10);
+  // Filter out unwanted tags and limit to reasonable number
+  const blockedTags = ['web', 'website', 'online', 'internet', 'www'];
+  return Array.from(tags)
+    .filter(tag => !blockedTags.includes(tag.toLowerCase()))
+    .slice(0, 10);
 }
 
 /**

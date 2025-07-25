@@ -1,6 +1,6 @@
 import { json, LoaderFunctionArgs, ActionFunctionArgs, redirect } from "@remix-run/node";
 import { useLoaderData, Form, useActionData, useNavigation } from "@remix-run/react";
-import { Clock, Users, ExternalLink, Edit2, Save, X, Plus, Trash2, Upload, StickyNote, AlertTriangle, ShoppingCart, Star, Globe, Lock } from "lucide-react";
+import { Clock, Users, ExternalLink, Edit2, Save, X, Plus, Trash2, Upload, StickyNote, AlertTriangle, ShoppingCart, Star, Globe, Lock, Replace } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { db } from "~/utils/db.server";
 import { requireUserId } from "~/utils/auth.server";
@@ -16,6 +16,8 @@ import TimerManager, { type TimerManagerRef } from "~/components/TimerManager";
 import { detectTimersFromRecipe, DetectedTimer } from "~/utils/time-parser";
 import { getRecipeNutrition } from "~/utils/nutrition-storage.server";
 import NutritionFacts from "~/components/NutritionFacts";
+import SubstitutionModal, { type SubstitutionOptions } from "~/components/SubstitutionModal";
+import RecipePreviewModal from "~/components/RecipePreviewModal";
 import type { RecipeNutrition } from "~/utils/nutrition.server";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
@@ -466,6 +468,174 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       return json({ error: "Failed to update recipe visibility" }, { status: 500 });
     }
   }
+  
+  if (intent === "overwriteRecipe") {
+    const substitutedRecipeData = formData.get("substitutedRecipeData");
+    
+    if (!substitutedRecipeData) {
+      return json({ error: "No substitution data provided" }, { status: 400 });
+    }
+    
+    try {
+      const parsedData = JSON.parse(substitutedRecipeData.toString());
+      const { title, description, ingredients, instructions, substitutionNotes } = parsedData;
+      
+      // Get existing recipe for reference
+      const existingRecipe = await db.recipe.findFirst({
+        where: { id: recipeId, userId },
+      });
+      
+      if (!existingRecipe) {
+        return json({ error: "Recipe not found" }, { status: 404 });
+      }
+      
+      // Update the existing recipe
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: {
+          title: title || existingRecipe.title,
+          description: description || existingRecipe.description,
+        }
+      });
+      
+      // Delete existing ingredients, instructions, notes, and nutrition data
+      await db.ingredient.deleteMany({
+        where: { recipeId }
+      });
+      
+      await db.instruction.deleteMany({
+        where: { recipeId }
+      });
+      
+      await db.note.deleteMany({
+        where: { recipeId }
+      });
+      
+      // Delete nutrition data since ingredients have changed
+      await db.recipeNutrition.deleteMany({
+        where: { recipeId }
+      });
+      
+      // Create new ingredients
+      if (ingredients && ingredients.length > 0) {
+        await db.ingredient.createMany({
+          data: ingredients.map((ing: any, index: number) => ({
+            name: ing.name,
+            quantity: ing.quantity || null,
+            unit: ing.unit || null,
+            notes: null,
+            original: `${ing.quantity || ''} ${ing.unit || ''} ${ing.name}`.trim(),
+            recipeId: recipeId
+          }))
+        });
+      }
+      
+      // Create new instructions
+      if (instructions && typeof instructions === 'string') {
+        const instructionSteps = instructions.split('\n').filter((step: string) => step.trim());
+        await db.instruction.createMany({
+          data: instructionSteps.map((step: string, index: number) => ({
+            stepNumber: index + 1,
+            description: step.trim(),
+            recipeId: recipeId
+          }))
+        });
+      }
+      
+      // Create substitution notes
+      if (substitutionNotes) {
+        await db.note.create({
+          data: {
+            text: substitutionNotes,
+            recipeId: recipeId
+          }
+        });
+      }
+      
+      return json({ 
+        success: true, 
+        overwriteRecipe: true,
+        message: "Recipe updated with substitutions!"
+      });
+    } catch (error) {
+      console.error("Error overwriting recipe:", error);
+      return json({ error: "Failed to update recipe with substitutions" }, { status: 500 });
+    }
+  }
+  
+  if (intent === "saveAsNewRecipe") {
+    const substitutedRecipeData = formData.get("substitutedRecipeData");
+    const originalRecipeId = formData.get("originalRecipeId");
+    
+    if (!substitutedRecipeData || !originalRecipeId) {
+      return json({ error: "Missing recipe data" }, { status: 400 });
+    }
+    
+    try {
+      const parsedData = JSON.parse(substitutedRecipeData.toString());
+      const { title, description, ingredients, instructions, substitutionNotes } = parsedData;
+      
+      // Get original recipe for reference
+      const originalRecipe = await db.recipe.findFirst({
+        where: { id: originalRecipeId.toString(), userId },
+      });
+      
+      if (!originalRecipe) {
+        return json({ error: "Original recipe not found" }, { status: 404 });
+      }
+      
+      // Create new recipe
+      const newRecipe = await db.recipe.create({
+        data: {
+          title: title || `${originalRecipe.title} (Substituted)`,
+          description: description || originalRecipe.description,
+          prepTime: originalRecipe.prepTime,
+          cookTime: originalRecipe.cookTime,
+          servings: originalRecipe.servings,
+          imageUrl: originalRecipe.imageUrl,
+          userId,
+          version: 1,
+          ingredients: {
+            create: ingredients?.map((ing: any) => ({
+              name: ing.name,
+              quantity: ing.quantity || null,
+              unit: ing.unit || null,
+              notes: null,
+              original: `${ing.quantity || ''} ${ing.unit || ''} ${ing.name}`.trim(),
+            })) || []
+          },
+          instructionSteps: {
+            create: typeof instructions === 'string' 
+              ? instructions.split('\n').filter((step: string) => step.trim()).map((step: string, index: number) => ({
+                  stepNumber: index + 1,
+                  description: step.trim(),
+                }))
+              : []
+          },
+          userRecipes: {
+            create: {
+              userId,
+            },
+          },
+        },
+      });
+      
+      // Create substitution notes for the new recipe
+      if (substitutionNotes) {
+        await db.note.create({
+          data: {
+            text: substitutionNotes,
+            recipeId: newRecipe.id
+          }
+        });
+      }
+      
+      return redirect(`/recipes/${newRecipe.id}?newSubstitution=true`);
+    } catch (error) {
+      console.error("Error saving new recipe:", error);
+      return json({ error: "Failed to save new recipe" }, { status: 500 });
+    }
+  }
 
   return json({ error: "Invalid action" }, { status: 400 });
 };
@@ -493,6 +663,15 @@ export default function RecipeDetail() {
   const [newGroceryListName, setNewGroceryListName] = useState('');
   const [showRatingForm, setShowRatingForm] = useState(false);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+  
+  // Substitution modal states
+  const [showSubstitutionModal, setShowSubstitutionModal] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [isLoadingSubstitutions, setIsLoadingSubstitutions] = useState(false);
+  const [substitutionResult, setSubstitutionResult] = useState<{
+    originalRecipe: any;
+    substitutedRecipe: any;
+  } | null>(null);
 
   // Refs for timer functionality
   const timerManagerRef = useRef<TimerManagerRef>(null);
@@ -522,6 +701,11 @@ export default function RecipeDetail() {
         } else if ('toggledPublic' in actionData && actionData.toggledPublic) {
           const message = 'message' in actionData ? actionData.message : 'Recipe visibility updated!';
           setToast({ message: message as string, type: 'success' });
+        } else if ('overwriteRecipe' in actionData && actionData.overwriteRecipe) {
+          const message = 'message' in actionData ? actionData.message : 'Recipe updated with substitutions!';
+          setToast({ message: message as string, type: 'success' });
+          setShowPreviewModal(false);
+          setSubstitutionResult(null);
         } else {
           setIsEditing(false);
           setToast({ message: 'Recipe updated successfully!', type: 'success' });
@@ -541,6 +725,97 @@ export default function RecipeDetail() {
       setImagePreview(null);
     }
   }, [isEditing, recipe.ingredients, recipe.instructionSteps]);
+  
+  // Function to handle substitution request
+  const handleSubstitutionRequest = async (options: SubstitutionOptions) => {
+    setIsLoadingSubstitutions(true);
+    
+    try {
+      const response = await fetch('/api/substitutions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          recipeId: recipe.id,
+          dietaryOptions: options.dietaryOptions,
+          specificIngredients: options.specificIngredients,
+        }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setSubstitutionResult(data);
+        setShowSubstitutionModal(false);
+        setShowPreviewModal(true);
+      } else {
+        const errorData = await response.json();
+        setToast({ message: errorData.error || 'Failed to generate substitutions', type: 'error' });
+      }
+    } catch (error) {
+      console.error('Error generating substitutions:', error);
+      setToast({ message: 'Error generating substitutions', type: 'error' });
+    } finally {
+      setIsLoadingSubstitutions(false);
+    }
+  };
+  
+  // Function to handle overwriting current recipe
+  const handleOverwriteRecipe = async () => {
+    if (!substitutionResult) return;
+    
+    const form = new FormData();
+    form.append('intent', 'overwriteRecipe');
+    form.append('substitutedRecipeData', JSON.stringify(substitutionResult.substitutedRecipe));
+    
+    try {
+      const response = await fetch(window.location.pathname, {
+        method: 'POST',
+        body: form,
+      });
+      
+      if (response.ok) {
+        setShowPreviewModal(false);
+        setSubstitutionResult(null);
+        // Reload the page to show updated recipe
+        window.location.reload();
+      } else {
+        const errorData = await response.json();
+        setToast({ message: errorData.error || 'Failed to update recipe', type: 'error' });
+      }
+    } catch (error) {
+      console.error('Error overwriting recipe:', error);
+      setToast({ message: 'Error updating recipe', type: 'error' });
+    }
+  };
+  
+  // Function to handle saving as new recipe
+  const handleSaveAsNewRecipe = async () => {
+    if (!substitutionResult) return;
+    
+    const form = new FormData();
+    form.append('intent', 'saveAsNewRecipe');
+    form.append('substitutedRecipeData', JSON.stringify(substitutionResult.substitutedRecipe));
+    form.append('originalRecipeId', recipe.id);
+    
+    try {
+      const response = await fetch(window.location.pathname, {
+        method: 'POST',
+        body: form,
+      });
+      
+      if (response.ok) {
+        // The response should redirect to the new recipe
+        window.location.href = await response.url;
+      } else {
+        const errorData = await response.json();
+        setToast({ message: errorData.error || 'Failed to save new recipe', type: 'error' });
+      }
+    } catch (error) {
+      console.error('Error saving new recipe:', error);
+      setToast({ message: 'Error saving new recipe', type: 'error' });
+    }
+  };
   
   // Function to load nutrition data when user requests it
   const loadNutritionData = async () => {
@@ -1190,13 +1465,23 @@ export default function RecipeDetail() {
             <div className="lg:col-span-1">
               <div className="mb-4 space-y-4">
                 <IngredientsList ingredients={recipe.ingredients} originalServings={recipe.servings || undefined} />
-                  <button
-                    onClick={() => setShowGroceryListModal(true)}
-                    className="inline-flex items-center px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"
-                  >
-                    <ShoppingCart size={16} className="mr-2" />
-                    Add to Grocery List
-                  </button>
+                  <div className="space-y-2 w-3/4">
+                    <button
+                      onClick={() => setShowGroceryListModal(true)}
+                      className="inline-flex items-center px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 w-full"
+                    >
+                      <ShoppingCart size={16} className="mr-5 w-5 h-5" />
+                      Add to Grocery List
+                    </button>
+                    
+                    <button
+                      onClick={() => setShowSubstitutionModal(true)}
+                      className="inline-flex items-center px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 w-full"
+                    >
+                      <Replace size={16} className="mr-5 w-5 h-5" />
+                      Substitutions
+                    </button>
+                  </div>
               </div>
             </div>
             
@@ -1360,6 +1645,36 @@ export default function RecipeDetail() {
         itemDescription="ingredients"
         actionIntent="addToGroceryList"
       />
+      
+      {/* Substitution Modal */}
+      <SubstitutionModal
+        isOpen={showSubstitutionModal}
+        onClose={() => setShowSubstitutionModal(false)}
+        recipe={recipe}
+        recipeTags={recipe.tags.map(rt => rt.tag.name)}
+        onSubstitute={handleSubstitutionRequest}
+        isLoading={isLoadingSubstitutions}
+      />
+      
+      {/* Recipe Preview Modal */}
+      {substitutionResult && (
+        <RecipePreviewModal
+          isOpen={showPreviewModal}
+          onClose={() => {
+            setShowPreviewModal(false);
+            setSubstitutionResult(null);
+          }}
+          originalRecipe={substitutionResult.originalRecipe}
+          substitutedRecipe={substitutionResult.substitutedRecipe}
+          onOverwrite={() => {
+            handleOverwriteRecipe();
+          }}
+          onSaveAsNew={() => {
+            handleSaveAsNewRecipe();
+          }}
+          isSaving={isSubmitting}
+        />
+      )}
     </div>
   );
 }
