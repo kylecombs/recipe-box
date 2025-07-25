@@ -44,6 +44,7 @@ model Recipe {
   ingredients      Ingredient[]
   instructionSteps Instruction[]
   notes            Note[]
+  nutrition        RecipeNutrition?
   parent           Recipe?           @relation("RecipeVersions", fields: [parentId], references: [id])
   ratings          RecipeRating[]
   versions         Recipe[]          @relation("RecipeVersions")
@@ -205,4 +206,40 @@ model MealPlanRating {
   @@unique([userId, mealPlanId])
   @@index([mealPlanId], map: "MealPlanRating_mealPlanId_fkey")
   @@index([userId], map: "MealPlanRating_userId_fkey")
+}
+
+model RecipeNutrition {
+  id                String   @id @default(uuid())
+  recipeId          String   @unique
+  servings          Int
+  // Total nutrition for entire recipe
+  totalCalories     Float
+  totalProtein      Float
+  totalCarbs        Float
+  totalFat          Float
+  totalFiber        Float
+  totalSugar        Float
+  totalSodium       Float
+  totalCholesterol  Float
+  totalVitaminC     Float
+  totalCalcium      Float
+  totalIron         Float
+  // Per serving nutrition
+  perServingCalories     Float
+  perServingProtein      Float
+  perServingCarbs        Float
+  perServingFat          Float
+  perServingFiber        Float
+  perServingSugar        Float
+  perServingSodium       Float
+  perServingCholesterol  Float
+  perServingVitaminC     Float
+  perServingCalcium      Float
+  perServingIron         Float
+  // Metadata
+  analyzedAt        DateTime @default(now())
+  confidence        Float    @default(0.8) // Average confidence score
+  recipe            Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@index([recipeId], map: "RecipeNutrition_recipeId_fkey")
 }
