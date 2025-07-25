@@ -483,11 +483,9 @@ export default function RecipeDetail() {
 
   // Detect timers from recipe content
   const detectedTimers = detectTimersFromRecipe(
-    recipe.title,
-    recipe.description || '',
     recipe.instructionSteps.map(step => step.description),
-    recipe.prepTime || undefined,
-    recipe.cookTime || undefined
+    recipe.cookTime || undefined,
+    recipe.id
   );
 
   // Handle action responses

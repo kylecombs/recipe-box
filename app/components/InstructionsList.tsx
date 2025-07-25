@@ -18,9 +18,7 @@ interface InstructionsListProps {
 
 export default function InstructionsList({ 
   instructions, 
-  timers = [], 
-  recipeTitle = "", 
-  recipeDescription = "",
+  timers = [],
   onTimerClick
 }: InstructionsListProps) {
   const highlightRefs = useRef<Map<string, HighlightableTextRef>>(new Map());
@@ -30,10 +28,7 @@ export default function InstructionsList({
   const getCumulativeTextOffset = useCallback((stepIndex: number) => {
     const sortedInstructions = instructions.sort((a, b) => a.stepNumber - b.stepNumber);
     
-    // Start with title and description (joined with spaces)
     let offset = 0;
-    if (recipeTitle) offset += recipeTitle.length + 1; // +1 for space separator
-    if (recipeDescription) offset += recipeDescription.length + 1; // +1 for space separator
     
     // Add lengths of previous instructions
     for (let i = 0; i < stepIndex; i++) {
@@ -41,7 +36,7 @@ export default function InstructionsList({
     }
     
     return offset;
-  }, [instructions, recipeTitle, recipeDescription]);
+  }, [instructions]);
 
   // Create a global function to handle timer scrolling
   useEffect(() => {
@@ -72,7 +67,7 @@ export default function InstructionsList({
     return () => {
       delete (window as typeof window & { scrollToTimerInInstructions?: (timer: DetectedTimer) => void }).scrollToTimerInInstructions;
     };
-  }, [instructions, timers, recipeTitle, recipeDescription, getCumulativeTextOffset]);
+  }, [instructions, timers, getCumulativeTextOffset]);
 
   // Filter timers for each instruction based on position
   const getTimersForInstruction = (instruction: Instruction, stepIndex: number) => {

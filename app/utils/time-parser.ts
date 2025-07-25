@@ -41,7 +41,7 @@ const TIME_PATTERNS = [
   // Words: "fifteen minutes", "half an hour", "quarter hour"
   /(fifteen|thirty|forty-five|half|quarter)\s*(?:an?\s*)?(minutes?|mins?|hours?|hrs?|m|h)/gi,
   
-  // Overnight, all day, etc.
+  // Overnight, all day, etc. (these will be excluded from timer creation)
   /(overnight|all\s+day|all\s+night)/gi,
 ];
 
@@ -155,14 +155,11 @@ function parseTimeToMinutes(
   match: RegExpMatchArray, 
   patternIndex: number
 ): number {
-  const matchText = match[0].toLowerCase();
   
-  // Handle overnight, all day
+  // Handle overnight, all day - but return 0 to exclude these from timer creation
   if (patternIndex === TIME_PATTERNS.length - 1) {
-    if (matchText.includes('overnight')) return 480; // 8 hours
-    if (matchText.includes('all day')) return 720; // 12 hours
-    if (matchText.includes('all night')) return 480; // 8 hours
-    return 60; // default 1 hour
+    // These are long-duration activities that aren't suitable for active timers
+    return 0; // Return 0 to exclude from timer creation
   }
   
   // Handle word numbers
@@ -299,7 +296,7 @@ export function detectTimersFromText(text: string): DetectedTimer[] {
           let contextEnd = matchEnd;
           
           // Look backwards for the start of the current sentence or meaningful phrase
-          let searchStart = Math.max(0, matchStart - 150);
+          const searchStart = Math.max(0, matchStart - 150);
           const beforeText = text.slice(searchStart, matchStart);
           
           // Look for cooking verbs that should be included in the context
@@ -313,13 +310,13 @@ export function detectTimersFromText(text: string): DetectedTimer[] {
           
           // Try to find sentence boundary first
           const sentenceMatch = beforeText.match(/[.!?]\s+([^.!?]*)$/);
-          if (sentenceMatch && sentenceMatch[1].length > 10) {
+          if (sentenceMatch && sentenceMatch[1].length > 10 && sentenceMatch.index !== undefined) {
             // Found a sentence - use it
             defaultContextStart = searchStart + sentenceMatch.index + sentenceMatch[0].indexOf(sentenceMatch[1]);
           } else {
             // Look for clause boundaries, but be careful with cooking verbs
             const clauseMatch = beforeText.match(/[,;:]\s+([^,;:.]*)$/);
-            if (clauseMatch && clauseMatch[1].length > 10) {
+            if (clauseMatch && clauseMatch[1].length > 10 && clauseMatch.index !== undefined) {
               const potentialStart = searchStart + clauseMatch.index + clauseMatch[0].indexOf(clauseMatch[1]);
               // Check if we're cutting off a cooking verb
               const beforeClause = text.slice(Math.max(0, potentialStart - 10), potentialStart);
@@ -327,7 +324,7 @@ export function detectTimersFromText(text: string): DetectedTimer[] {
                 // Don't use this clause boundary, it would cut off a cooking verb
                 // Fall through to standard fallback
                 const wordMatch = beforeText.match(/\s+(\S.*)$/);
-                if (wordMatch) {
+                if (wordMatch && wordMatch.index !== undefined) {
                   defaultContextStart = searchStart + wordMatch.index + 1;
                 }
               } else {
@@ -336,7 +333,7 @@ export function detectTimersFromText(text: string): DetectedTimer[] {
             } else {
               // Standard fallback
               const wordMatch = beforeText.match(/\s+(\S.*)$/);
-              if (wordMatch) {
+              if (wordMatch && wordMatch.index !== undefined) {
                 defaultContextStart = searchStart + wordMatch.index + 1;
               }
             }
@@ -391,7 +388,7 @@ export function detectTimersFromText(text: string): DetectedTimer[] {
           }
           
           // Look forward for the end of the sentence or meaningful phrase
-          let searchEnd = Math.min(text.length, matchEnd + 100);
+          const searchEnd = Math.min(text.length, matchEnd + 100);
           const afterText = text.slice(matchEnd, searchEnd);
           
           // Try to find sentence end
@@ -489,42 +486,20 @@ export function detectTimersFromText(text: string): DetectedTimer[] {
 }
 
 export function detectTimersFromRecipe(
-  title: string = '',
-  description: string = '',
   instructions: string[] = [],
-  prepTime?: number,
   cookTime?: number,
   recipeId?: string
 ): DetectedTimer[] {
-  const allText = [
-    title,
-    description,
-    ...instructions,
-  ].join(' ');
+  // Only detect timers from instructions, not from title or description
+  const instructionsText = instructions.join(' ');
   
-  const detectedTimers = detectTimersFromText(allText).map(timer => ({
+  const detectedTimers = detectTimersFromText(instructionsText).map(timer => ({
     ...timer,
     id: recipeId ? `${recipeId}-${timer.id}` : timer.id,
   }));
   
-  // Add prep and cook times from recipe metadata
+  // Add cook time from recipe metadata (but not prep time)
   const metadataTimers: DetectedTimer[] = [];
-  
-  if (prepTime && prepTime > 0) {
-    metadataTimers.push({
-      id: recipeId ? `${recipeId}-prep-time-${prepTime}` : `prep-time-${prepTime}`,
-      label: `Prep Time (${prepTime}m)`,
-      minutes: prepTime,
-      originalText: `${prepTime} minutes`,
-      context: 'Recipe preparation time',
-      type: 'prep',
-      // Metadata timers don't have specific text positions
-      contextStart: -1,
-      contextEnd: -1,
-      timerStart: -1,
-      timerEnd: -1,
-    });
-  }
   
   if (cookTime && cookTime > 0) {
     metadataTimers.push({

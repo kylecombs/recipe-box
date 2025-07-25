@@ -130,19 +130,25 @@ const TimerManager = forwardRef<TimerManagerRef, TimerManagerProps>(({ timers, r
     }
   }, [recipeId, timers]);
 
-  // Timer state persistence is now handled by individual Timer components via localStorage
-  // This callback just updates the local state for UI purposes
-  const updateTimerState = useCallback((state: TimerState) => {
-    setTimerStates(prev => ({
-      ...prev,
-      [state.id]: state
-    }));
-  }, []);
-
   // Handle timer state changes (just for UI updates)
+  // Use useCallback with empty deps to prevent infinite loops
   const handleTimerStateChange = useCallback((state: TimerState) => {
-    updateTimerState(state);
-  }, [updateTimerState]);
+    setTimerStates(prev => {
+      // Only update if the state actually changed to prevent unnecessary re-renders
+      const currentState = prev[state.id];
+      if (currentState && 
+          currentState.isRunning === state.isRunning && 
+          currentState.remainingTime === state.remainingTime &&
+          currentState.isPaused === state.isPaused) {
+        return prev; // No change, return same object to prevent re-render
+      }
+      
+      return {
+        ...prev,
+        [state.id]: state
+      };
+    });
+  }, []); // Empty deps to prevent recreation
 
   // Check for active timers
   useEffect(() => {
