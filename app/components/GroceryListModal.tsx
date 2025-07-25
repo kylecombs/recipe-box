@@ -1,4 +1,4 @@
-import { Form } from "@remix-run/react";
+import { Form, type FetcherWithComponents } from "@remix-run/react";
 import { ShoppingCart } from "lucide-react";
 
 interface GroceryList {
@@ -18,7 +18,7 @@ interface GroceryListModalProps {
   itemDescription?: string;
   actionIntent?: string;
   additionalInputs?: React.ReactNode;
-  fetcher?: any;
+  fetcher?: FetcherWithComponents<unknown>;
 }
 
 export default function GroceryListModal({
@@ -58,10 +58,11 @@ export default function GroceryListModal({
             
             {groceryLists.length > 0 && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="groceryListSelect1" className="block text-sm font-medium text-gray-700 mb-2">
                   Select existing list:
                 </label>
                 <select
+                  id="groceryListSelect1"
                   name="groceryListId"
                   value={selectedGroceryListId}
                   onChange={(e) => {
@@ -85,11 +86,12 @@ export default function GroceryListModal({
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="newListName1" className="block text-sm font-medium text-gray-700 mb-2">
                 Create new list:
               </label>
               <input
                 type="text"
+                id="newListName1"
                 name="newListName"
                 value={newGroceryListName}
                 onChange={(e) => {
@@ -136,10 +138,11 @@ export default function GroceryListModal({
             
             {groceryLists.length > 0 && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="groceryListSelect2" className="block text-sm font-medium text-gray-700 mb-2">
                   Select existing list:
                 </label>
                 <select
+                  id="groceryListSelect2"
                   name="groceryListId"
                   value={selectedGroceryListId}
                   onChange={(e) => {
@@ -163,11 +166,12 @@ export default function GroceryListModal({
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="newListName2" className="block text-sm font-medium text-gray-700 mb-2">
                 Create new list:
               </label>
               <input
                 type="text"
+                id="newListName2"
                 name="newListName"
                 value={newGroceryListName}
                 onChange={(e) => {

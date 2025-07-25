@@ -1,6 +1,7 @@
 import { json, redirect, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
 import { useLoaderData, useNavigate, Form, useActionData, useNavigation } from "@remix-run/react";
-import { ArrowLeft, Save, Calendar, Plus, Minus } from "lucide-react";
+import { RecipeCombobox } from "~/components/RecipeCombobox";
+import { Save, Calendar, Plus, Minus } from "lucide-react";
 import { requireUserId } from "~/utils/auth.server";
 import { db } from "~/utils/db.server";
 import { useState } from "react";
@@ -25,7 +26,26 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     throw new Response("Meal plan not found", { status: 404 });
   }
   
-  return json({ mealPlan });
+  // Get user's recipes
+  const userRecipes = await db.userRecipe.findMany({
+    where: { userId },
+    include: {
+      recipe: {
+        select: {
+          id: true,
+          title: true,
+          servings: true,
+          prepTime: true,
+          cookTime: true,
+        },
+      },
+    },
+    orderBy: { importedAt: "desc" },
+  });
+
+  const recipes = userRecipes.map(ur => ur.recipe);
+  
+  return json({ mealPlan, recipes });
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
@@ -76,7 +96,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 }
 
 export default function EditMealPlan() {
-  const { mealPlan } = useLoaderData<typeof loader>();
+  const { mealPlan, recipes } = useLoaderData<typeof loader>();
   const actionData = useActionData<ActionData>();
   const navigation = useNavigation();
   const navigate = useNavigate();
@@ -85,9 +105,9 @@ export default function EditMealPlan() {
   // Define types for meal plan data
   type MealPlanDay = {
     day: string;
-    breakfast: { recipe: string; notes?: string };
-    lunch: { recipe: string; notes?: string };
-    dinner: { recipe: string; notes?: string };
+    breakfast: { recipe: string; recipeId?: string; notes?: string };
+    lunch: { recipe: string; recipeId?: string; notes?: string };
+    dinner: { recipe: string; recipeId?: string; notes?: string };
   };
   
   type ShoppingListItem = {
@@ -107,18 +127,30 @@ export default function EditMealPlan() {
   const [weekPlan, setWeekPlan] = useState(initialWeekPlan);
   const [shoppingList, setShoppingList] = useState(initialShoppingList);
   
-  const handleDayChange = (dayIndex: number, field: string, value: string) => {
+  const handleDayChange = (dayIndex: number, field: string, value: string, recipeId?: string) => {
     setWeekPlan(prev => prev.map((day, index) => {
       if (index === dayIndex) {
         const [mealType, subField] = field.split('.');
         const mealTypeKey = mealType as keyof Pick<MealPlanDay, 'breakfast' | 'lunch' | 'dinner'>;
-        return {
-          ...day,
-          [mealTypeKey]: {
-            ...day[mealTypeKey],
-            [subField]: value,
-          },
-        };
+        
+        if (subField === 'recipe') {
+          return {
+            ...day,
+            [mealTypeKey]: {
+              ...day[mealTypeKey],
+              recipe: value,
+              recipeId: recipeId || undefined,
+            },
+          };
+        } else {
+          return {
+            ...day,
+            [mealTypeKey]: {
+              ...day[mealTypeKey],
+              [subField]: value,
+            },
+          };
+        }
       }
       return day;
     }));
@@ -163,14 +195,6 @@ export default function EditMealPlan() {
   return (
     <div className="max-w-4xl mx-auto p-6">
       <div className="mb-6">
-        <button
-          onClick={() => navigate(`/meal-plans/${mealPlan.id}`)}
-          className="inline-flex items-center text-blue-600 hover:text-blue-700 mb-4"
-        >
-          <ArrowLeft size={20} className="mr-1" />
-          Back to Meal Plan
-        </button>
-        
         <h1 className="text-3xl font-bold flex items-center">
           <Calendar className="mr-3" size={32} />
           Edit Meal Plan
@@ -269,12 +293,12 @@ export default function EditMealPlan() {
                       <label className="block text-sm font-medium text-gray-700 capitalize">
                         {mealType}
                       </label>
-                      <input
-                        type="text"
+                      <RecipeCombobox
+                        recipes={recipes}
                         value={day[mealType].recipe}
-                        onChange={(e) => handleDayChange(dayIndex, `${mealType}.recipe`, e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                        onChange={(value, recipeId) => handleDayChange(dayIndex, `${mealType}.recipe`, value, recipeId)}
                         placeholder={`${mealType.charAt(0).toUpperCase() + mealType.slice(1)} recipe`}
+                        className="w-full"
                       />
                       <input
                         type="text"

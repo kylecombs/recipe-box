@@ -1,6 +1,6 @@
 import { json, LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData, Link, Form } from "@remix-run/react";
-import { Plus, ShoppingCart, LogOut, Calendar, Users } from "lucide-react";
+import { useLoaderData, Link } from "@remix-run/react";
+import { Plus } from "lucide-react";
 import { db } from "~/utils/db.server";
 import { requireUserId } from "~/utils/auth.server";
 import RecipeCard from "~/components/RecipeCard";
@@ -75,54 +75,24 @@ export default function RecipesIndex() {
 
   return (
     <div className="max-w-6xl mx-auto p-6">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-8">
+      {/* Page Header */}
+      <div className="sm:flex sm:justify-between sm:items-center mb-8">
         <h1 className="text-3xl font-bold text-gray-900">My Recipes</h1>
-        <div className="flex gap-4 items-center">
-          <Link
-            to="/community"
-            className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 flex items-center"
-          >
-            <Users size={20} className="mr-2" />
-            Community
-          </Link>
-          <Link
-            to="/meal-plans"
-            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center"
-          >
-            <Calendar size={20} className="mr-2" />
-            Meal Plans
-          </Link>
-          <Link
-            to="/grocery-lists"
-            className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 flex items-center"
-          >
-            <ShoppingCart size={20} className="mr-2" />
-            Grocery Lists
-          </Link>
+        <div className="flex gap-4 items-center pt-4 sm:pt-0">
           <Link
             to="import"
             className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center"
           >
-            <Plus size={20} className="mr-2" />
+            <Plus size={20} className="mr-2 hidden sm:block" />
             Import from URL
           </Link>
           <Link
             to="new"
             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center"
           >
-            <Plus size={20} className="mr-2" />
+            <Plus size={20} className="mr-2 hidden sm:block" />
             Add Recipe
           </Link>
-          <Form method="post" action="/logout" className="inline">
-            <button
-              type="submit"
-              className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 flex items-center"
-            >
-              <LogOut size={20} className="mr-2" />
-              Logout
-            </button>
-          </Form>
         </div>
       </div>
 

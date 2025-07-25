@@ -1,10 +1,10 @@
 import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
-import { useLoaderData, useFetcher } from "@remix-run/react";
+import { useLoaderData, useFetcher, Link } from "@remix-run/react";
 import { requireUserId } from "~/utils/auth.server";
 import { db } from "~/utils/db.server";
 import { generateMealPlan, checkMealPlannerHealth } from "~/utils/meal-planner.server";
 import { useState, useEffect } from "react";
-import { areIngredientsEqual, combineQuantities, getCanonicalIngredientName } from "~/utils/ingredient-matcher.server";
+import { areIngredientsEqual, combineQuantities } from "~/utils/ingredient-matcher.server";
 import GroceryListModal from "~/components/GroceryListModal";
 import Toast from "~/components/Toast";
 import { ShoppingCart } from "lucide-react";
@@ -102,9 +102,9 @@ export async function action({ request }: ActionFunctionArgs) {
     });
 
     return json({ success: true, mealPlan });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Meal plan generation error:", error);
-    return json({ success: false, error: error?.message || "Failed to generate meal plan" }, { status: 500 });
+    return json({ success: false, error: error instanceof Error ? error.message : "Failed to generate meal plan" }, { status: 500 });
   }
   }
   
@@ -127,7 +127,7 @@ export async function action({ request }: ActionFunctionArgs) {
       });
       
       return json({ success: true, saved: true, savedPlanId: savedPlan.id });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Meal plan save error:", error);
       return json({ success: false, error: "Failed to save meal plan" }, { status: 500 });
     }
@@ -216,7 +216,7 @@ export async function action({ request }: ActionFunctionArgs) {
       ]);
       
       return json({ success: true, addedToList: true });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Add to grocery list error:", error);
       return json({ success: false, error: "Failed to add items to grocery list" }, { status: 500 });
     }
@@ -285,22 +285,23 @@ export default function MealPlan() {
   useEffect(() => {
     // Only process when fetcher has completed a submission (not on initial load)
     if (fetcher.state === 'idle' && fetcher.data && Object.keys(fetcher.data).length > 0) {
-      if (fetcher.data.success === true && fetcher.data.addedToList === true) {
+      const data = fetcher.data as { success?: boolean; addedToList?: boolean; saved?: boolean; error?: string };
+      if (data.success === true && data.addedToList === true) {
         setShowGroceryListModal(false);
         setSelectedGroceryListId("");
         setNewGroceryListName("");
         setShowSuccessToast(true);
         setShowErrorToast(false);
         setErrorMessage("");
-      } else if (fetcher.data.success === true && fetcher.data.saved === true) {
+      } else if (data.success === true && data.saved === true) {
         setShowSavedToast(true);
         setShowErrorToast(false);
         setErrorMessage("");
-      } else if (fetcher.data.success === false && fetcher.data.error) {
+      } else if (data.success === false && data.error) {
         setShowErrorToast(true);
         setShowSuccessToast(false);
         setShowSavedToast(false);
-        setErrorMessage(fetcher.data.error);
+        setErrorMessage(data.error);
       }
     }
   }, [fetcher.state, fetcher.data]);
@@ -520,21 +521,48 @@ export default function MealPlan() {
                   <div className="space-y-2">
                     <div>
                       <span className="font-medium text-sm">Breakfast:</span>
-                      <p className="text-sm">{day.breakfast.recipe}</p>
+                      {day.breakfast.recipeId ? (
+                        <Link
+                          to={`/recipes/${day.breakfast.recipeId}`}
+                          className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {day.breakfast.recipe}
+                        </Link>
+                      ) : (
+                        <p className="text-sm">{day.breakfast.recipe}</p>
+                      )}
                       {day.breakfast.notes && (
                         <p className="text-xs text-gray-600">{day.breakfast.notes}</p>
                       )}
                     </div>
                     <div>
                       <span className="font-medium text-sm">Lunch:</span>
-                      <p className="text-sm">{day.lunch.recipe}</p>
+                      {day.lunch.recipeId ? (
+                        <Link
+                          to={`/recipes/${day.lunch.recipeId}`}
+                          className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {day.lunch.recipe}
+                        </Link>
+                      ) : (
+                        <p className="text-sm">{day.lunch.recipe}</p>
+                      )}
                       {day.lunch.notes && (
                         <p className="text-xs text-gray-600">{day.lunch.notes}</p>
                       )}
                     </div>
                     <div>
                       <span className="font-medium text-sm">Dinner:</span>
-                      <p className="text-sm">{day.dinner.recipe}</p>
+                      {day.dinner.recipeId ? (
+                        <Link
+                          to={`/recipes/${day.dinner.recipeId}`}
+                          className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {day.dinner.recipe}
+                        </Link>
+                      ) : (
+                        <p className="text-sm">{day.dinner.recipe}</p>
+                      )}
                       {day.dinner.notes && (
                         <p className="text-xs text-gray-600">{day.dinner.notes}</p>
                       )}

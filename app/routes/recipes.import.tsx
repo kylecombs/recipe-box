@@ -25,9 +25,17 @@ export const action: ActionFunction = async ({ request }) => {
   
   // Handle URL import
   if (url) {
+    console.log("🔍 Recipe Import - URL received:", url.toString());
+    console.log("🔍 Recipe Import - User ID:", userId);
     try {
       // Import recipe with versioning support
       const { recipe, isNewVersion } = await importRecipeWithVersioning(url.toString(), userId);
+      
+      console.log("✅ Recipe Import - Recipe imported successfully:");
+      console.log("   - Recipe ID:", recipe.id);
+      console.log("   - Recipe Title:", recipe.title);
+      console.log("   - Is New Version:", isNewVersion);
+      console.log("   - Recipe Object:", JSON.stringify(recipe, null, 2));
       
       // Associate the user with this recipe version
       await associateUserWithRecipe(userId, recipe.id);
@@ -37,6 +45,7 @@ export const action: ActionFunction = async ({ request }) => {
         ? `/recipes/${recipe.id}?newVersion=true`
         : `/recipes/${recipe.id}`;
       
+      console.log("🔀 Recipe Import - Redirecting to:", redirectUrl);
       return redirect(redirectUrl);
     } catch (error) {
       console.error("Error importing recipe:", error);
@@ -418,18 +427,12 @@ Instructions:
         </Form>
       )}
       
-      <div className="pt-4 mt-6 border-t flex justify-between">
+      <div className="pt-4 mt-6 border-t flex justify-center">
         <a 
           href="/recipes/new" 
           className="text-blue-600 hover:text-blue-800"
         >
           Enter recipe manually instead
-        </a>
-        <a 
-          href="/recipes" 
-          className="text-gray-600 hover:text-gray-800"
-        >
-          Back to recipes
         </a>
       </div>
     </div>

@@ -26,23 +26,31 @@ export interface RecipeData {
 }
 
 export async function parseRecipeFromUrl(url: string): Promise<RecipeData | null> {
+  console.log("🌐 Recipe Parser - Starting to parse URL:", url);
   try {
+    console.log("📡 Recipe Parser - Fetching URL...");
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
       }
     });
     
+    console.log("📡 Recipe Parser - Response status:", response.status, response.statusText);
+    
     if (!response.ok) {
+      console.error("❌ Recipe Parser - Failed to fetch URL:", response.statusText);
       throw new Error(`Failed to fetch URL: ${response.statusText}`);
     }
     
     const html = await response.text();
+    console.log("📄 Recipe Parser - HTML length:", html.length);
+    
     const dom = new JSDOM(html);
     const document = dom.window.document;
     
     // Try to find JSON-LD structured data first (most reliable)
     const jsonLdScripts = document.querySelectorAll('script[type="application/ld+json"]');
+    console.log("🔍 Recipe Parser - Found JSON-LD scripts:", jsonLdScripts.length);
     
     for (const jsonLdScript of jsonLdScripts) {
       try {
@@ -73,12 +81,69 @@ export async function parseRecipeFromUrl(url: string): Promise<RecipeData | null
     return await parseMicrodataRecipe(document);
     
   } catch (error) {
-    console.error('Error parsing recipe from URL:', error);
+    console.error('❌ Recipe Parser - Error parsing recipe from URL:', error);
+    console.error('❌ Recipe Parser - Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    });
     return null;
   }
 }
 
+function isNoBake(recipe: Record<string, unknown>): boolean {
+  // Check the recipe title and description for no-bake indicators
+  const title = (recipe.name as string || '').toLowerCase();
+  const description = (recipe.description as string || '').toLowerCase();
+  const instructions = Array.isArray(recipe.recipeInstructions) 
+    ? (recipe.recipeInstructions as unknown[]).map(inst => {
+        if (typeof inst === 'string') return inst;
+        if (inst && typeof inst === 'object') {
+          const instruction = inst as Record<string, unknown>;
+          return (instruction.text as string) || 
+                 (instruction.name as string) || 
+                 '';
+        }
+        return '';
+      }).join(' ').toLowerCase()
+    : '';
+  
+  const allText = `${title} ${description} ${instructions}`;
+  
+  // Look for no-bake indicators
+  const noBakeIndicators = [
+    'no-bake',
+    'no bake',
+    'refrigerate',
+    'chill',
+    'freeze',
+    'icebox',
+    'no cooking',
+    'no heat',
+    'raw',
+    'uncooked'
+  ];
+  
+  const hasBakeIndicators = noBakeIndicators.some(indicator => allText.includes(indicator));
+  
+  // Also check if instructions mention refrigeration but no actual cooking
+  const hasCookingTerms = /\b(bake|baking|oven|cook|cooking|heat|boil|fry|sauté|simmer|roast|grill)\b/i.test(allText);
+  const hasRefrigeration = /\b(refrigerat|chill|freeze)\b/i.test(allText);
+  
+  // If it has refrigeration terms but no cooking terms, it's likely no-bake
+  // Or if it explicitly mentions no-bake terms
+  return hasBakeIndicators || (hasRefrigeration && !hasCookingTerms);
+}
+
 async function parseJsonLdRecipe(recipe: Record<string, unknown>): Promise<RecipeData> {
+  console.log("🔬 JSON-LD Parser - Raw recipe data:");
+  console.log("   - prepTime:", recipe.prepTime);
+  console.log("   - cookTime:", recipe.cookTime);
+  console.log("   - totalTime:", recipe.totalTime);
+  console.log("   - recipeInstructions (sample):", Array.isArray(recipe.recipeInstructions) ? recipe.recipeInstructions.slice(0, 2) : recipe.recipeInstructions);
+  
+  // Check if this is a no-bake recipe
+  const isNoBakeRecipe = isNoBake(recipe);
+  console.log("🧁 JSON-LD Parser - No-bake detection:", isNoBakeRecipe);
   
   // Collect all ingredient strings for batch parsing
   const ingredientTexts: string[] = [];
@@ -137,7 +202,7 @@ async function parseJsonLdRecipe(recipe: Record<string, unknown>): Promise<Recip
     description: decodeHtmlEntities((recipe.description as string) || ''),
     imageUrl: getImageUrl(recipe.image),
     prepTimeMinutes: parseTimeToMinutes(recipe.prepTime as string),
-    cookTimeMinutes: parseTimeToMinutes(recipe.cookTime as string),
+    cookTimeMinutes: isNoBakeRecipe ? undefined : parseTimeToMinutes(recipe.cookTime as string),
     servings: parseServings(recipe.recipeYield as string | number),
     ingredients: ingredients.map(ing => ({
       ...ing,
@@ -457,6 +522,19 @@ async function parseMicrodataRecipe(document: Document): Promise<RecipeData> {
       .filter(text => text && stepPattern.test(text))
       .map(text => text!.replace(stepPattern, '').trim());
   }
+  
+  console.log("🍽️ Recipe Parser - Final parsed data:");
+  console.log("   - Title:", title);
+  console.log("   - Description:", description);
+  console.log("   - Image URL:", imageUrl);
+  console.log("   - Prep time (raw):", prepTime);
+  console.log("   - Prep time (parsed):", parseTimeToMinutes(prepTime), "minutes");
+  console.log("   - Cook time (raw):", cookTime);
+  console.log("   - Cook time (parsed):", parseTimeToMinutes(cookTime), "minutes");
+  console.log("   - Servings:", servings, "->", parseServings(servings));
+  console.log("   - Ingredients count:", ingredientTexts.filter(Boolean).length);
+  console.log("   - Instructions count:", instructionTexts.filter(Boolean).length);
+  console.log("   - Instructions:", instructionTexts.map((inst, i) => `${i+1}. ${inst}`));
   
   return {
     title: decodeHtmlEntities(title),

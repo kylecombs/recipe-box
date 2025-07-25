@@ -1,6 +1,6 @@
 import { json, type LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData, Link, useFetcher } from "@remix-run/react";
-import { ArrowLeft, Clock, Users, Heart, Star, Globe } from "lucide-react";
+import { useLoaderData, useFetcher } from "@remix-run/react";
+import { Clock, Users, Heart, Star, Globe } from "lucide-react";
 import { db } from "~/utils/db.server";
 import { requireUserId } from "~/utils/auth.server";
 import IngredientsList from "~/components/IngredientsList";
@@ -142,16 +142,8 @@ export default function CommunityRecipeDetail() {
         onClose={() => setShowErrorToast(false)}
       />
 
-      {/* Header */}
+      {/* Recipe Header */}
       <div className="mb-6">
-        <Link
-          to="/community"
-          className="inline-flex items-center text-blue-600 hover:text-blue-700 mb-4"
-        >
-          <ArrowLeft size={20} className="mr-1" />
-          Back to Community Recipes
-        </Link>
-        
         <div className="flex flex-col lg:flex-row gap-6">
           {recipe.imageUrl && (
             <div className="lg:w-1/3">

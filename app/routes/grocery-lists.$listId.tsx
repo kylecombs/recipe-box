@@ -1,6 +1,6 @@
 import { json, LoaderFunctionArgs, ActionFunctionArgs, redirect } from "@remix-run/node";
-import { useLoaderData, Link, useActionData, useNavigation } from "@remix-run/react";
-import { ArrowLeft, Plus, ShoppingCart, Trash2 } from "lucide-react";
+import { useLoaderData, useActionData, useNavigation } from "@remix-run/react";
+import { Plus, ShoppingCart, Trash2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { db } from "~/utils/db.server";
 import { requireUserId } from "~/utils/auth.server";
@@ -400,15 +400,7 @@ export default function GroceryListDetail() {
       
       {/* Header */}
       <div className="mb-6">
-        <div className="flex justify-between items-center mb-4">
-          <Link 
-            to="/grocery-lists" 
-            className="inline-flex items-center text-blue-600 hover:text-blue-800"
-          >
-            <ArrowLeft size={20} className="mr-2" />
-            Back to Grocery Lists
-          </Link>
-          
+        <div className="flex justify-end mb-4">
           <div className="flex gap-2">
             <button
               onClick={() => setShowDeleteConfirm(true)}

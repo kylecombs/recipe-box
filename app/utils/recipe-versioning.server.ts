@@ -210,22 +210,44 @@ export async function markOlderVersionsAsOutdated(sourceUrl: string, latestVersi
  * Import or update a recipe from URL with versioning support
  */
 export async function importRecipeWithVersioning(url: string, userId: string) {
+  console.log("🚀 Recipe Versioning - Starting import for URL:", url);
+  console.log("🚀 Recipe Versioning - User ID:", userId);
+  
   // Parse the recipe from the URL
   const newRecipeData = await parseRecipeFromUrl(url);
   
+  console.log("📝 Recipe Versioning - Parsed recipe data:");
+  console.log("   - Title:", newRecipeData?.title);
+  console.log("   - Instructions count:", newRecipeData?.instructions?.length);
+  console.log("   - Ingredients count:", newRecipeData?.ingredients?.length);
+  console.log("   - Full data:", JSON.stringify(newRecipeData, null, 2));
+  
   if (!newRecipeData) {
+    console.error("❌ Recipe Versioning - Failed to parse recipe data");
     throw new Error("Could not extract recipe information from this URL");
   }
   
   // Check if this URL has been imported before
   const existingRecipe = await getLatestRecipeVersion(url);
   
+  console.log("🔍 Recipe Versioning - Existing recipe check:");
+  console.log("   - Found existing recipe:", !!existingRecipe);
+  if (existingRecipe) {
+    console.log("   - Existing recipe ID:", existingRecipe.id);
+    console.log("   - Existing recipe title:", existingRecipe.title);
+  }
+  
   if (existingRecipe) {
     // Convert existing recipe to comparable format
     const existingRecipeData = dbRecipeToRecipeData(existingRecipe);
     
     // Check if the recipe has changed
-    if (hasRecipeChanged(existingRecipeData, newRecipeData)) {
+    const hasChanged = hasRecipeChanged(existingRecipeData, newRecipeData);
+    console.log("🔄 Recipe Versioning - Recipe comparison:");
+    console.log("   - Recipe has changed:", hasChanged);
+    
+    if (hasChanged) {
+      console.log("📦 Recipe Versioning - Creating new version...");
       // Create a new version
       const newVersion = await createRecipeVersion(
         url,
@@ -234,17 +256,28 @@ export async function importRecipeWithVersioning(url: string, userId: string) {
         existingRecipe.parentId || existingRecipe.id
       );
       
+      console.log("✅ Recipe Versioning - New version created:");
+      console.log("   - New version ID:", newVersion.id);
+      console.log("   - Version number:", newVersion.version);
+      
       // Mark older versions as outdated
       await markOlderVersionsAsOutdated(url, newVersion.version);
       
       return { recipe: newVersion, isNewVersion: true };
     } else {
+      console.log("♻️  Recipe Versioning - No changes detected, returning existing recipe");
       // No changes, return the existing recipe
       return { recipe: existingRecipe, isNewVersion: false };
     }
   } else {
+    console.log("🆕 Recipe Versioning - First time importing this URL, creating new recipe...");
     // First time importing this URL
     const newRecipe = await createRecipeVersion(url, newRecipeData, userId);
+    
+    console.log("✅ Recipe Versioning - New recipe created:");
+    console.log("   - Recipe ID:", newRecipe.id);
+    console.log("   - Recipe title:", newRecipe.title);
+    
     return { recipe: newRecipe, isNewVersion: false };
   }
 }

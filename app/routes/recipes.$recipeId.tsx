@@ -1,7 +1,7 @@
 import { json, LoaderFunctionArgs, ActionFunctionArgs, redirect } from "@remix-run/node";
-import { useLoaderData, Link, Form, useActionData, useNavigation } from "@remix-run/react";
-import { ArrowLeft, Clock, Users, ExternalLink, Edit2, Save, X, Plus, Trash2, Upload, StickyNote, AlertTriangle, ShoppingCart, Star, Globe, Lock } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useLoaderData, Form, useActionData, useNavigation } from "@remix-run/react";
+import { Clock, Users, ExternalLink, Edit2, Save, X, Plus, Trash2, Upload, StickyNote, AlertTriangle, ShoppingCart, Star, Globe, Lock } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 import { db } from "~/utils/db.server";
 import { requireUserId } from "~/utils/auth.server";
 import { areIngredientsEqual, combineQuantities, getCanonicalIngredientName } from "~/utils/ingredient-matcher.server";
@@ -12,8 +12,8 @@ import Toast from "~/components/Toast";
 import GroceryListModal from "~/components/GroceryListModal";
 import StarRating from "~/components/StarRating";
 import RatingForm from "~/components/RatingForm";
-import TimerManager from "~/components/TimerManager";
-import { detectTimersFromRecipe } from "~/utils/time-parser";
+import TimerManager, { type TimerManagerRef } from "~/components/TimerManager";
+import { detectTimersFromRecipe, DetectedTimer } from "~/utils/time-parser";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const userId = await requireUserId(request);
@@ -478,13 +478,14 @@ export default function RecipeDetail() {
   const [newGroceryListName, setNewGroceryListName] = useState('');
   const [showRatingForm, setShowRatingForm] = useState(false);
 
+  // Refs for timer functionality
+  const timerManagerRef = useRef<TimerManagerRef>(null);
+
   // Detect timers from recipe content
   const detectedTimers = detectTimersFromRecipe(
-    recipe.title,
-    recipe.description || '',
     recipe.instructionSteps.map(step => step.description),
-    recipe.prepTime || undefined,
-    recipe.cookTime || undefined
+    recipe.cookTime || undefined,
+    recipe.id
   );
 
   // Handle action responses
@@ -588,17 +589,9 @@ export default function RecipeDetail() {
         />
       )}
       
-      {/* Header */}
+      {/* Page Actions */}
       <div className="mb-6">
-        <div className="flex justify-between items-center mb-4">
-          <Link 
-            to="/recipes" 
-            className="inline-flex items-center text-blue-600 hover:text-blue-800"
-          >
-            <ArrowLeft size={20} className="mr-2" />
-            Back to Recipes
-          </Link>
-          
+        <div className="flex justify-end mb-4">
           <div className="flex gap-2">
             <button
               onClick={() => setIsEditing(!isEditing)}
@@ -1054,7 +1047,18 @@ export default function RecipeDetail() {
 
       {/* Timers - Only show when not editing */}
       {!isEditing && detectedTimers.length > 0 && (
-        <TimerManager timers={detectedTimers} recipeId={recipe.id} />
+        <TimerManager 
+          ref={timerManagerRef}
+          timers={detectedTimers} 
+          recipeId={recipe.id}
+          onContextClick={(timer) => {
+            // Scroll to the timer context in the instructions
+            const scrollFunction = (window as unknown as { scrollToTimerInInstructions?: (timer: DetectedTimer) => void }).scrollToTimerInInstructions;
+            if (scrollFunction) {
+              scrollFunction(timer);
+            }
+          }}
+        />
       )}
 
       {/* Recipe Content - Only show when not editing */}
@@ -1077,7 +1081,18 @@ export default function RecipeDetail() {
             
             {/* Instructions */}
             <div className="lg:col-span-2">
-              <InstructionsList instructions={recipe.instructionSteps} />
+              <InstructionsList 
+                instructions={recipe.instructionSteps} 
+                timers={detectedTimers}
+                recipeTitle={recipe.title}
+                recipeDescription={recipe.description || ""}
+                onTimerClick={(timer) => {
+                  // Scroll to the corresponding timer in TimerManager
+                  if (timerManagerRef.current) {
+                    timerManagerRef.current.scrollToTimer(timer);
+                  }
+                }}
+              />
             </div>
           </div>
           

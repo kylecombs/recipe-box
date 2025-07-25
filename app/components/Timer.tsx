@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Play, Pause, RotateCcw, Clock, AlertCircle } from "lucide-react";
 import type { DetectedTimer, TimerState } from "~/utils/time-parser";
 
@@ -6,63 +6,121 @@ interface TimerProps {
   timer: DetectedTimer;
   onStateChange?: (state: TimerState) => void;
   initialState?: TimerState;
+  onContextClick?: (timer: DetectedTimer) => void;
 }
 
-export default function Timer({ timer, onStateChange, initialState }: TimerProps) {
-  const [state, setState] = useState<TimerState>(() => {
-    if (initialState) {
-      return initialState;
-    }
-    return {
-      id: timer.id,
-      isRunning: false,
-      remainingTime: timer.minutes * 60, // Convert to seconds
-      startTime: 0,
-      totalDuration: timer.minutes * 60,
-    };
+// Format time helper function
+const formatTime = (seconds: number): string => {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  return `${minutes}:${secs.toString().padStart(2, '0')}`;
+};
+
+export default function Timer({ timer, onStateChange, initialState, onContextClick }: TimerProps) {
+  const totalDurationMs = timer.minutes * 60 * 1000; // Convert to milliseconds
+  const storageKey = `timer_${timer.id}`;
+  const pausedStorageKey = `${storageKey}_paused`;
+  
+  // State for timer control (minimal, only for UI updates)
+  const [timerState, setTimerState] = useState({
+    isRunning: false,
+    isPaused: false,
+    isCompleted: false,
+  });
+  const [isInitialized, setIsInitialized] = useState(false);
+  
+  // Refs for direct DOM manipulation
+  const timeDisplayRef = useRef<HTMLDivElement>(null);
+  const progressBarRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  
+  // RAF and timer data refs
+  const rafRef = useRef<number | null>(null);
+  const timerDataRef = useRef({
+    remainingTime: Math.floor(totalDurationMs / 1000),
+    endTime: 0,
+    lastUpdateTime: 0,
   });
 
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Helper function to get value from localStorage
+  const getLocalStorageValue = (key: string): string | null => {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem(key);
+  };
 
-  // Update parent component when state changes
-  useEffect(() => {
-    onStateChange?.(state);
-  }, [state, onStateChange]);
+  // Helper function to set value in localStorage
+  const setLocalStorageValue = (key: string, value: string): void => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(key, value);
+  };
 
-  // Handle timer countdown
-  useEffect(() => {
-    if (state.isRunning && state.remainingTime > 0) {
-      intervalRef.current = setInterval(() => {
-        setState(prevState => {
-          const now = Date.now();
-          const elapsed = Math.floor((now - prevState.startTime) / 1000);
-          const newRemainingTime = Math.max(0, prevState.totalDuration - elapsed);
-          
-          return {
-            ...prevState,
-            remainingTime: newRemainingTime,
-          };
-        });
-      }, 1000);
-    } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+  // Helper function to remove value from localStorage
+  const removeLocalStorageValue = (key: string): void => {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(key);
+  };
+
+  // Direct DOM updates using refs (no React re-renders)
+  const updateTimerDisplay = useCallback((remainingSeconds: number, isRunning: boolean, isPaused: boolean, isCompleted: boolean) => {
+    // Update time display
+    if (timeDisplayRef.current) {
+      timeDisplayRef.current.textContent = formatTime(remainingSeconds);
+      
+      // Update color classes
+      timeDisplayRef.current.className = `text-2xl font-mono font-bold text-center mb-4 ${
+        isCompleted ? 'text-red-600' : 
+        isRunning ? 'text-green-600' : 
+        isPaused ? 'text-orange-600' : 'text-gray-600'
+      }`;
     }
 
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [state.isRunning, state.remainingTime, state.startTime, state.totalDuration]);
+    // Update progress bar
+    if (progressBarRef.current) {
+      const totalSeconds = Math.floor(totalDurationMs / 1000);
+      const progressPercentage = ((totalSeconds - remainingSeconds) / totalSeconds) * 100;
+      
+      progressBarRef.current.style.width = `${progressPercentage}%`;
+      progressBarRef.current.className = `h-2 rounded-full transition-all duration-300 ${
+        isCompleted ? 'bg-red-500' :
+        isRunning ? 'bg-green-500' :
+        isPaused ? 'bg-orange-500' : 'bg-gray-400'
+      }`;
+    }
 
-  // Handle timer completion
-  useEffect(() => {
-    if (state.isRunning && state.remainingTime === 0) {
-      setState(prev => ({ ...prev, isRunning: false }));
+    // Update container background
+    if (containerRef.current) {
+      containerRef.current.className = `rounded-lg border p-4 transition-colors h-full ${
+        isCompleted ? 'bg-red-50 border-red-200' :
+        isRunning ? 'bg-green-50 border-green-200' :
+        isPaused ? 'bg-orange-50 border-orange-200' : 'bg-gray-50 border-gray-200'
+      }`;
+    }
+  }, [totalDurationMs]);
+
+  // RAF animation loop
+  const animate = useCallback(() => {
+    if (!timerState.isRunning) return;
+
+    const now = Date.now();
+    const endTime = timerDataRef.current.endTime;
+    const remainingMs = Math.max(0, endTime - now);
+    const remainingSeconds = Math.floor(remainingMs / 1000);
+
+    timerDataRef.current.remainingTime = remainingSeconds;
+
+    // Update DOM directly
+    updateTimerDisplay(remainingSeconds, true, false, remainingSeconds === 0);
+
+    if (remainingSeconds === 0) {
+      // Timer completed
+      setTimerState(prev => ({ ...prev, isRunning: false, isCompleted: true }));
+      removeLocalStorageValue(storageKey);
       
       // Play notification sound
       if (audioRef.current) {
@@ -76,111 +134,234 @@ export default function Timer({ timer, onStateChange, initialState }: TimerProps
           icon: '/favicon.ico',
         });
       }
-    }
-  }, [state.isRunning, state.remainingTime, timer.label, timer.type]);
 
-  const handleStart = () => {
-    if (state.remainingTime === 0) {
-      // Reset if timer is at 0
+      // Notify parent component
+      if (onStateChange) {
+        onStateChange({
+          id: timer.id,
+          isRunning: false,
+          remainingTime: 0,
+          startTime: Date.now(),
+          totalDuration: Math.floor(totalDurationMs / 1000),
+          isPaused: false,
+        });
+      }
+    } else {
+      // Continue animation
+      rafRef.current = requestAnimationFrame(animate);
+    }
+  }, [timerState.isRunning, storageKey, timer.id, timer.label, timer.type, totalDurationMs, updateTimerDisplay, onStateChange]);
+
+  // Start RAF loop
+  const startAnimation = useCallback(() => {
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+    }
+    rafRef.current = requestAnimationFrame(animate);
+  }, [animate]);
+
+  // Stop RAF loop
+  const stopAnimation = useCallback(() => {
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  }, []);
+
+  // Initialize timer state from localStorage on mount
+  useEffect(() => {
+    const savedEndDate = getLocalStorageValue(storageKey);
+    const pausedData = getLocalStorageValue(pausedStorageKey);
+    
+    if (pausedData) {
+      // Timer was paused
+      try {
+        const pausedInfo = JSON.parse(pausedData);
+        const remaining = Math.floor(pausedInfo.remainingTime / 1000);
+        timerDataRef.current.remainingTime = remaining;
+        setTimerState({
+          isRunning: false,
+          isPaused: true,
+          isCompleted: false,
+        });
+        updateTimerDisplay(remaining, false, true, false);
+      } catch (e) {
+        console.error('Failed to parse paused timer data:', e);
+        removeLocalStorageValue(pausedStorageKey);
+      }
+    } else if (savedEndDate && !isNaN(parseInt(savedEndDate, 10))) {
+      // Timer was running
+      const currentTime = Date.now();
+      const endTime = parseInt(savedEndDate, 10);
+      const delta = endTime - currentTime;
+
+      if (delta > totalDurationMs) {
+        // Invalid end date (somehow longer than total duration), clear it
+        removeLocalStorageValue(storageKey);
+      } else if (delta <= 0) {
+        // Timer has expired while we were away
+        timerDataRef.current.remainingTime = 0;
+        setTimerState({
+          isRunning: false,
+          isPaused: false,
+          isCompleted: true,
+        });
+        removeLocalStorageValue(storageKey);
+        updateTimerDisplay(0, false, false, true);
+      } else {
+        // Timer is still running - restore the running state
+        const remaining = Math.floor(delta / 1000);
+        timerDataRef.current.remainingTime = remaining;
+        timerDataRef.current.endTime = endTime;
+        setTimerState({
+          isRunning: true,
+          isPaused: false,
+          isCompleted: false,
+        });
+        updateTimerDisplay(remaining, true, false, false);
+      }
+    } else if (initialState) {
+      // Use initial state if provided and no saved state
+      timerDataRef.current.remainingTime = initialState.remainingTime;
+      setTimerState({
+        isRunning: initialState.isRunning,
+        isPaused: initialState.isPaused || false,
+        isCompleted: initialState.remainingTime === 0,
+      });
+      updateTimerDisplay(initialState.remainingTime, initialState.isRunning, initialState.isPaused || false, initialState.remainingTime === 0);
+    } else {
+      // Default initialization
+      updateTimerDisplay(timerDataRef.current.remainingTime, false, false, false);
+    }
+    
+    setIsInitialized(true);
+  }, [initialState, pausedStorageKey, storageKey, totalDurationMs, updateTimerDisplay]);
+
+  // RAF control effect - start/stop animation based on timer state
+  useEffect(() => {
+    if (!isInitialized) return;
+
+    if (timerState.isRunning) {
+      startAnimation();
+    } else {
+      stopAnimation();
+    }
+
+    return () => {
+      stopAnimation();
+    };
+  }, [isInitialized, timerState.isRunning, startAnimation, stopAnimation]);
+
+  const handleReset = useCallback(() => {
+    // Clear all localStorage for this timer
+    removeLocalStorageValue(storageKey);
+    removeLocalStorageValue(pausedStorageKey);
+
+    const resetTime = Math.floor(totalDurationMs / 1000);
+    timerDataRef.current.remainingTime = resetTime;
+    timerDataRef.current.endTime = 0;
+    
+    setTimerState({
+      isRunning: false,
+      isPaused: false,
+      isCompleted: false,
+    });
+    
+    updateTimerDisplay(resetTime, false, false, false);
+  }, [storageKey, pausedStorageKey, totalDurationMs, updateTimerDisplay]);
+
+  // Update parent component when state changes (throttled to reduce updates)
+  const lastNotifiedStateRef = useRef<{isRunning: boolean, isPaused: boolean, isCompleted: boolean}>({
+    isRunning: false,
+    isPaused: false,
+    isCompleted: false,
+  });
+
+  useEffect(() => {
+    if (onStateChange && isInitialized) {
+      // Only notify parent if significant state changes occurred
+      const lastState = lastNotifiedStateRef.current;
+      if (lastState.isRunning !== timerState.isRunning || 
+          lastState.isPaused !== timerState.isPaused || 
+          lastState.isCompleted !== timerState.isCompleted) {
+        
+        onStateChange({
+          id: timer.id,
+          isRunning: timerState.isRunning,
+          remainingTime: timerDataRef.current.remainingTime,
+          startTime: Date.now(),
+          totalDuration: Math.floor(totalDurationMs / 1000),
+          isPaused: timerState.isPaused,
+        });
+
+        lastNotifiedStateRef.current = {
+          isRunning: timerState.isRunning,
+          isPaused: timerState.isPaused,
+          isCompleted: timerState.isCompleted,
+        };
+      }
+    }
+  }, [timerState, timer.id, totalDurationMs, onStateChange, isInitialized]);
+
+  const handleStart = useCallback(() => {
+    if (timerDataRef.current.remainingTime === 0) {
+      // Reset timer if it's at 0
       handleReset();
       return;
     }
 
     const now = Date.now();
-    let startTime = now;
-    const remainingTime = state.remainingTime;
+    const endTime = now + (timerDataRef.current.remainingTime * 1000);
+    
+    // Save end time to localStorage
+    setLocalStorageValue(storageKey, endTime.toString());
+    
+    // Clear any paused state
+    removeLocalStorageValue(pausedStorageKey);
 
-    // If resuming from pause, calculate correct start time
-    if (state.pausedTime) {
-      startTime = now - (state.totalDuration - remainingTime) * 1000;
-    } else if (!state.startTime) {
-      // First time starting
-      startTime = now;
-    } else {
-      // Already has a start time, keep it
-      startTime = state.startTime;
-    }
-
-    setState(prev => ({
-      ...prev,
+    timerDataRef.current.endTime = endTime;
+    setTimerState({
       isRunning: true,
-      startTime,
-      pausedTime: undefined,
-    }));
+      isPaused: false,
+      isCompleted: false,
+    });
 
     // Request notification permission
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
-  };
+  }, [storageKey, pausedStorageKey, handleReset]);
 
-  const handlePause = () => {
-    setState(prev => ({
+  const handlePause = useCallback(() => {
+    // Save paused state with remaining time
+    const pausedInfo = {
+      remainingTime: timerDataRef.current.remainingTime * 1000,
+      pausedAt: Date.now(),
+    };
+    setLocalStorageValue(pausedStorageKey, JSON.stringify(pausedInfo));
+    
+    // Remove running timer end date
+    removeLocalStorageValue(storageKey);
+
+    setTimerState(prev => ({
       ...prev,
       isRunning: false,
-      pausedTime: Date.now(),
+      isPaused: true,
     }));
-  };
-
-  const handleReset = () => {
-    setState({
-      id: timer.id,
-      isRunning: false,
-      remainingTime: timer.minutes * 60,
-      startTime: 0,
-      totalDuration: timer.minutes * 60,
-    });
-  };
-
-  const formatTime = (seconds: number): string => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-
-    if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs
-        .toString()
-        .padStart(2, '0')}`;
-    }
-    return `${minutes}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const getProgressPercentage = (): number => {
-    return ((state.totalDuration - state.remainingTime) / state.totalDuration) * 100;
-  };
-
-  const getTimerColor = (): string => {
-    if (state.remainingTime === 0) return 'text-red-600';
-    if (state.isRunning) return 'text-green-600';
-    return 'text-gray-600';
-  };
-
-  const getBackgroundColor = (): string => {
-    if (state.remainingTime === 0) return 'bg-red-50 border-red-200';
-    if (state.isRunning) return 'bg-green-50 border-green-200';
-    return 'bg-gray-50 border-gray-200';
-  };
+    
+    updateTimerDisplay(timerDataRef.current.remainingTime, false, true, false);
+  }, [storageKey, pausedStorageKey, updateTimerDisplay]);
 
   const getTypeIcon = () => {
     const iconProps = { size: 16, className: "mr-2" };
     
-    switch (timer.type) {
-      case 'baking':
-      case 'cooking':
-        return <Clock {...iconProps} />;
-      case 'marinating':
-      case 'chilling':
-        return <Clock {...iconProps} />;
-      case 'resting':
-      case 'rising':
-        return <Clock {...iconProps} />;
-      default:
-        return <Clock {...iconProps} />;
-    }
+    // All timer types use the Clock icon for now
+    // Could be enhanced later with specific icons for different cooking methods
+    return <Clock {...iconProps} />;
   };
 
   return (
-    <div className={`rounded-lg border p-4 transition-colors ${getBackgroundColor()}`}>
+    <div ref={containerRef} className="rounded-lg border p-4 transition-colors h-full bg-gray-50 border-gray-200">
       {/* Hidden audio element for notification */}
       <audio
         ref={audioRef}
@@ -195,11 +376,14 @@ export default function Timer({ timer, onStateChange, initialState }: TimerProps
           {getTypeIcon()}
           <div>
             <h4 className="font-medium text-gray-900">{timer.label}</h4>
-            <p className="text-xs text-gray-500 capitalize">{timer.type}</p>
+            <p className="text-xs text-gray-500 capitalize">
+              {timer.type}
+              {timerState.isPaused && " • Paused"}
+            </p>
           </div>
         </div>
         
-        {state.remainingTime === 0 && (
+        {timerState.isCompleted && (
           <AlertCircle className="text-red-500" size={20} />
         )}
       </div>
@@ -208,46 +392,58 @@ export default function Timer({ timer, onStateChange, initialState }: TimerProps
       <div className="mb-3">
         <div className="w-full bg-gray-200 rounded-full h-2">
           <div
-            className={`h-2 rounded-full transition-all duration-1000 ${
-              state.remainingTime === 0
-                ? 'bg-red-500'
-                : state.isRunning
-                ? 'bg-green-500'
-                : 'bg-gray-400'
-            }`}
-            style={{ width: `${getProgressPercentage()}%` }}
+            ref={progressBarRef}
+            className="h-2 rounded-full transition-all duration-300 bg-gray-400"
+            style={{ width: '0%' }}
           />
         </div>
       </div>
 
       {/* Time display */}
-      <div className={`text-2xl font-mono font-bold text-center mb-4 ${getTimerColor()}`}>
-        {formatTime(state.remainingTime)}
+      <div ref={timeDisplayRef} className="text-2xl font-mono font-bold text-center mb-4 text-gray-600">
+        {formatTime(timerDataRef.current.remainingTime)}
       </div>
 
       {/* Controls */}
       <div className="flex justify-center gap-2">
         <button
-          onClick={state.isRunning ? handlePause : handleStart}
+          onClick={(e) => {
+            e.stopPropagation();
+            timerState.isRunning ? handlePause() : handleStart();
+          }}
+          disabled={!isInitialized}
           className={`inline-flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-            state.isRunning
+            timerState.isRunning
               ? 'bg-orange-600 text-white hover:bg-orange-700'
-              : state.remainingTime === 0
+              : timerState.isCompleted
               ? 'bg-green-600 text-white hover:bg-green-700'
               : 'bg-green-600 text-white hover:bg-green-700'
-          }`}
+          } ${!isInitialized ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
-          {state.isRunning ? (
+          {timerState.isRunning ? (
             <Pause size={16} className="mr-1" />
           ) : (
             <Play size={16} className="mr-1" />
           )}
-          {state.isRunning ? 'Pause' : state.remainingTime === 0 ? 'Restart' : 'Start'}
+          {timerState.isRunning 
+            ? 'Pause' 
+            : timerState.isCompleted 
+            ? 'Restart' 
+            : timerState.isPaused 
+            ? 'Resume' 
+            : 'Start'
+          }
         </button>
         
         <button
-          onClick={handleReset}
-          className="inline-flex items-center px-3 py-2 bg-gray-600 text-white rounded-md text-sm font-medium hover:bg-gray-700 transition-colors"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleReset();
+          }}
+          disabled={!isInitialized}
+          className={`inline-flex items-center px-3 py-2 bg-gray-600 text-white rounded-md text-sm font-medium hover:bg-gray-700 transition-colors ${
+            !isInitialized ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
         >
           <RotateCcw size={16} className="mr-1" />
           Reset
@@ -256,7 +452,23 @@ export default function Timer({ timer, onStateChange, initialState }: TimerProps
 
       {/* Context info */}
       {timer.context && (
-        <div className="mt-3 p-2 bg-gray-100 rounded text-xs text-gray-600">
+        <div 
+          className={`mt-3 p-2 bg-gray-100 rounded text-xs text-gray-600 ${
+            onContextClick && timer.contextStart !== -1 
+              ? 'cursor-pointer hover:bg-gray-200 transition-colors' 
+              : ''
+          }`}
+          onClick={() => onContextClick && timer.contextStart !== -1 && onContextClick(timer)}
+          onKeyDown={onContextClick && timer.contextStart !== -1 ? (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onContextClick(timer);
+            }
+          } : undefined}
+          role={onContextClick && timer.contextStart !== -1 ? "button" : undefined}
+          tabIndex={onContextClick && timer.contextStart !== -1 ? 0 : undefined}
+          title={onContextClick && timer.contextStart !== -1 ? "Click to jump to this part of the recipe" : undefined}
+        >
           <strong>Context:</strong> {timer.context}
         </div>
       )}

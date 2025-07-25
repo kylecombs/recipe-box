@@ -1,9 +1,10 @@
 import { json, type LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData, Link } from "@remix-run/react";
-import { ArrowLeft, Users, Star, Heart, Clock, ChefHat } from "lucide-react";
+import { Users, Heart, Clock, ChefHat } from "lucide-react";
 import { db } from "~/utils/db.server";
 import { requireUserId } from "~/utils/auth.server";
 import StarRating from "~/components/StarRating";
+import type { Prisma } from "@prisma/client";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const userId = await requireUserId(request);
@@ -13,25 +14,25 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const sortBy = searchParams.get("sort") || "popular"; // popular, newest, rating
 
   // Build where clause for search
-  const whereClause: any = {
+  const whereClause: Prisma.RecipeWhereInput = {
     isPublic: true,
   };
 
   if (search) {
     whereClause.OR = [
-      { title: { contains: search, mode: "insensitive" } },
-      { description: { contains: search, mode: "insensitive" } },
+      { title: { contains: search } },
+      { description: { contains: search } },
     ];
   }
 
   // Build order by clause
-  let orderBy: any;
+  let orderBy: Prisma.RecipeOrderByWithRelationInput | Prisma.RecipeOrderByWithRelationInput[];
   switch (sortBy) {
     case "newest":
       orderBy = { publishedAt: "desc" };
       break;
     case "rating":
-      orderBy = [{ ratings: { _count: "desc" } }];
+      orderBy = { saveCount: "desc" }; // Fallback to save count since rating ordering needs aggregation
       break;
     case "popular":
     default:
@@ -83,16 +84,8 @@ export default function CommunityRecipes() {
 
   return (
     <div className="max-w-6xl mx-auto p-6">
-      {/* Header */}
+      {/* Page Header */}
       <div className="mb-8">
-        <Link
-          to="/recipes"
-          className="inline-flex items-center text-blue-600 hover:text-blue-700 mb-4"
-        >
-          <ArrowLeft size={20} className="mr-1" />
-          Back to My Recipes
-        </Link>
-        
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold flex items-center">
