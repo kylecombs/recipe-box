@@ -471,6 +471,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   
   if (intent === "overwriteRecipe") {
     const substitutedRecipeData = formData.get("substitutedRecipeData");
+    const dietaryOptionsData = formData.get("dietaryOptions");
     
     if (!substitutedRecipeData) {
       return json({ error: "No substitution data provided" }, { status: 400 });
@@ -479,10 +480,18 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     try {
       const parsedData = JSON.parse(substitutedRecipeData.toString());
       const { title, description, ingredients, instructions, substitutionNotes } = parsedData;
+      const dietaryOptions = dietaryOptionsData ? JSON.parse(dietaryOptionsData.toString()) : [];
       
       // Get existing recipe for reference
       const existingRecipe = await db.recipe.findFirst({
         where: { id: recipeId, userId },
+        include: {
+          tags: {
+            include: {
+              tag: true
+            }
+          }
+        }
       });
       
       if (!existingRecipe) {
@@ -552,6 +561,49 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         });
       }
       
+      // Handle tags - preserve non-dietary tags and update dietary ones
+      const dietaryTagNames = ['vegetarian', 'vegan', 'gluten-free', 'dairy-free', 'nut-free', 'low-sodium', 'low-carb', 'paleo', 'whole30'];
+      
+      // Get all current tags that are NOT dietary tags
+      const nonDietaryTags = existingRecipe.tags.filter(rt => 
+        !dietaryTagNames.includes(rt.tag.name.toLowerCase())
+      );
+      
+      // Delete ALL existing recipe tags
+      await db.recipeTag.deleteMany({
+        where: { recipeId: recipeId }
+      });
+      
+      // Re-add non-dietary tags
+      for (const recipeTag of nonDietaryTags) {
+        await db.recipeTag.create({
+          data: {
+            recipeId: recipeId,
+            tagId: recipeTag.tag.id
+          }
+        });
+      }
+      
+      // Add new dietary tags
+      if (dietaryOptions && dietaryOptions.length > 0) {
+        for (const dietaryOption of dietaryOptions) {
+          // Find or create the tag
+          const tag = await db.tag.upsert({
+            where: { name: dietaryOption.toLowerCase() },
+            update: {},
+            create: { name: dietaryOption.toLowerCase() }
+          });
+          
+          // Link tag to recipe
+          await db.recipeTag.create({
+            data: {
+              recipeId: recipeId,
+              tagId: tag.id
+            }
+          });
+        }
+      }
+      
       return json({ 
         success: true, 
         overwriteRecipe: true,
@@ -566,6 +618,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   if (intent === "saveAsNewRecipe") {
     const substitutedRecipeData = formData.get("substitutedRecipeData");
     const originalRecipeId = formData.get("originalRecipeId");
+    const dietaryOptionsData = formData.get("dietaryOptions");
     
     if (!substitutedRecipeData || !originalRecipeId) {
       return json({ error: "Missing recipe data" }, { status: 400 });
@@ -574,10 +627,18 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     try {
       const parsedData = JSON.parse(substitutedRecipeData.toString());
       const { title, description, ingredients, instructions, substitutionNotes } = parsedData;
+      const dietaryOptions = dietaryOptionsData ? JSON.parse(dietaryOptionsData.toString()) : [];
       
       // Get original recipe for reference
       const originalRecipe = await db.recipe.findFirst({
         where: { id: originalRecipeId.toString(), userId },
+        include: {
+          tags: {
+            include: {
+              tag: true
+            }
+          }
+        }
       });
       
       if (!originalRecipe) {
@@ -628,6 +689,43 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
             recipeId: newRecipe.id
           }
         });
+      }
+      
+      // Handle tags for the new recipe
+      const dietaryTagNames = ['vegetarian', 'vegan', 'gluten-free', 'dairy-free', 'nut-free', 'low-sodium', 'low-carb', 'paleo', 'whole30'];
+      
+      // Copy non-dietary tags from original recipe
+      const nonDietaryTags = originalRecipe.tags.filter(rt => 
+        !dietaryTagNames.includes(rt.tag.name.toLowerCase())
+      );
+      
+      for (const recipeTag of nonDietaryTags) {
+        await db.recipeTag.create({
+          data: {
+            recipeId: newRecipe.id,
+            tagId: recipeTag.tag.id
+          }
+        });
+      }
+      
+      // Add new dietary tags
+      if (dietaryOptions && dietaryOptions.length > 0) {
+        for (const dietaryOption of dietaryOptions) {
+          // Find or create the tag
+          const tag = await db.tag.upsert({
+            where: { name: dietaryOption.toLowerCase() },
+            update: {},
+            create: { name: dietaryOption.toLowerCase() }
+          });
+          
+          // Link tag to the new recipe
+          await db.recipeTag.create({
+            data: {
+              recipeId: newRecipe.id,
+              tagId: tag.id
+            }
+          });
+        }
       }
       
       return redirect(`/recipes/${newRecipe.id}?newSubstitution=true`);
@@ -767,6 +865,10 @@ export default function RecipeDetail() {
     const form = new FormData();
     form.append('intent', 'overwriteRecipe');
     form.append('substitutedRecipeData', JSON.stringify(substitutionResult.substitutedRecipe));
+    // Include dietary options if available
+    if (substitutionResult.dietaryOptions) {
+      form.append('dietaryOptions', JSON.stringify(substitutionResult.dietaryOptions));
+    }
     
     try {
       const response = await fetch(window.location.pathname, {
@@ -797,6 +899,10 @@ export default function RecipeDetail() {
     form.append('intent', 'saveAsNewRecipe');
     form.append('substitutedRecipeData', JSON.stringify(substitutionResult.substitutedRecipe));
     form.append('originalRecipeId', recipe.id);
+    // Include dietary options if available
+    if (substitutionResult.dietaryOptions) {
+      form.append('dietaryOptions', JSON.stringify(substitutionResult.dietaryOptions));
+    }
     
     try {
       const response = await fetch(window.location.pathname, {

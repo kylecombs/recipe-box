@@ -20,6 +20,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             where: { userId },
             select: { rating: true, comment: true },
           },
+          tags: {
+            include: {
+              tag: true,
+            },
+          },
         },
       },
     },
@@ -51,6 +56,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       userRecipes: {
         where: { userId },
         select: { id: true },
+      },
+      tags: {
+        include: {
+          tag: true,
+        },
       },
     },
     orderBy: { saveCount: "desc" },
@@ -141,6 +151,7 @@ export default function RecipesIndex() {
               servings={recipe.servings || undefined}
               hasUpdates={recipe.hasUpdates}
               userRating={recipe.userRating}
+              tags={recipe.tags}
             />
           ))}
         </div>

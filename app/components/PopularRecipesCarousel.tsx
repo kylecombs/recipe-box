@@ -1,7 +1,23 @@
 import { Link } from "@remix-run/react";
-import { Heart, Clock, Users, ChevronLeft, ChevronRight } from "lucide-react";
+import { Heart, Clock, Users, ChevronLeft, ChevronRight, Leaf, Wheat, Droplets, Zap } from "lucide-react";
 import { useState } from "react";
 import StarRating from "./StarRating";
+import Tooltip from "./Tooltip";
+
+// Map dietary tags to icons and colors
+const getDietaryIcon = (tagName: string) => {
+  const tag = tagName.toLowerCase();
+  
+  if (tag === 'vegetarian') return { icon: Leaf, color: 'text-green-600', title: 'Vegetarian' };
+  if (tag === 'vegan') return { icon: Leaf, color: 'text-green-700', title: 'Vegan' };
+  if (tag === 'gluten-free' || tag === 'gluten free') return { icon: Wheat, color: 'text-amber-600', title: 'Gluten-Free' };
+  if (tag === 'dairy-free' || tag === 'dairy free') return { icon: Droplets, color: 'text-blue-600', title: 'Dairy-Free' };
+  if (tag === 'quick') return { icon: Clock, color: 'text-purple-600', title: 'Quick Recipe' };
+  if (tag === 'healthy') return { icon: Heart, color: 'text-red-500', title: 'Healthy' };
+  if (tag === 'low-carb' || tag === 'low carb' || tag === 'keto') return { icon: Zap, color: 'text-orange-600', title: 'Low-Carb' };
+  
+  return null;
+};
 
 interface PopularRecipe {
   id: string;
@@ -19,6 +35,7 @@ interface PopularRecipe {
     email: string;
   };
   isUserSaved: boolean;
+  tags?: Array<{ tag: { name: string } }>;
 }
 
 interface PopularRecipesCarouselProps {
@@ -92,7 +109,7 @@ export default function PopularRecipesCarousel({
         {getCurrentRecipes().map((recipe) => (
           <div
             key={recipe.id}
-            className="bg-gray-50 rounded-lg overflow-hidden hover:shadow-md transition-shadow"
+            className="bg-gray-50 rounded-lg overflow-hidden hover:shadow-md transition-shadow relative"
           >
             {recipe.imageUrl && (
               <div className="relative">
@@ -187,6 +204,28 @@ export default function PopularRecipesCarousel({
                 )}
               </div>
             </div>
+            
+            {/* Dietary restriction icons in lower right corner */}
+            {recipe.tags && recipe.tags.length > 0 && (
+              <div className="absolute bottom-3 right-3 flex gap-1">
+                {recipe.tags
+                  .map(({ tag }) => getDietaryIcon(tag.name))
+                  .filter((iconData) => iconData !== null)
+                  .slice(0, 4) // Limit to 4 icons to avoid overcrowding
+                  .map((iconData, index) => {
+                    const Icon = iconData!.icon;
+                    return (
+                      <Tooltip key={index} content={iconData!.title}>
+                        <div
+                          className={`${iconData!.color} bg-white bg-opacity-90 rounded-full p-1 shadow-sm hover:scale-110 transition-transform cursor-pointer`}
+                        >
+                          <Icon size={12} />
+                        </div>
+                      </Tooltip>
+                    );
+                  })}
+              </div>
+            )}
           </div>
         ))}
       </div>

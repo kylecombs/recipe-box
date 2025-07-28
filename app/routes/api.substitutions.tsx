@@ -88,6 +88,7 @@ export async function action({ request }: ActionFunctionArgs) {
     return json({
       originalRecipe: substitutionResult.originalRecipe,
       substitutedRecipe: substitutionResult.substitutedRecipe,
+      dietaryOptions: dietaryOptions || [],
     });
 
   } catch (error) {
