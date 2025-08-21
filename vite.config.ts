@@ -21,4 +21,23 @@ export default defineConfig({
     }),
     tsconfigPaths(),
   ],
+  server: {
+    // Allow Caddy to proxy requests
+    host: "localhost",
+    port: 3000,
+  },
+  ssr: {
+    // Externalize server-only dependencies to prevent client bundling
+    noExternal: [],
+    external: ["bcryptjs", "jsonwebtoken", "@prisma/client"]
+  },
+  optimizeDeps: {
+    // Don't prebundle server-only dependencies
+    exclude: ["bcryptjs", "jsonwebtoken", "@prisma/client"]
+  },
+  build: {
+    rollupOptions: {
+      external: ["bcryptjs", "jsonwebtoken"]
+    }
+  }
 });

@@ -1,0 +1,57 @@
+# Caddy configuration for local development with HTTPS
+
+# Recipe app with HTTPS on localhost
+https://localhost {
+    # Use Caddy's internal CA for local HTTPS
+    tls internal
+
+    # Reverse proxy to Remix dev server
+    reverse_proxy localhost:3000
+
+    # Enable compression
+    encode gzip
+
+    # Security headers
+    header {
+        # Security headers for modern web apps
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        
+        # Allow cookies for authentication
+        # Remove HSTS for local development
+        -Strict-Transport-Security
+    }
+
+    # Logging for debugging
+    log {
+        output stdout
+        format console
+        level INFO
+    }
+}
+
+# Alternative domain names for local development
+recipe.local {
+    tls internal
+    reverse_proxy localhost:3000
+}
+
+# HTTP to HTTPS redirect
+http://localhost {
+    redir https://localhost{uri} permanent
+}
+
+# Meal planner service (if needed)
+https://api.localhost {
+    tls internal
+    reverse_proxy localhost:8001
+    
+    header {
+        Access-Control-Allow-Origin "https://localhost"
+        Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+        Access-Control-Allow-Headers "Content-Type, Authorization"
+        Access-Control-Allow-Credentials "true"
+    }
+}

@@ -1,12 +1,12 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
 import { Form, Link, useActionData, useSearchParams } from "@remix-run/react";
-import { commitSession, getSession } from "~/utils/session.server";
-import { db } from "~/utils/db.server";
+import { AuthService } from "~/services/auth.server";
+import { getOptionalUser, createAuthCookie } from "~/utils/jwt.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const session = await getSession(request.headers.get("Cookie"));
-  if (session.has("userId")) {
+  const user = await getOptionalUser(request);
+  if (user) {
     return redirect("/recipes");
   }
   return json({});
@@ -19,50 +19,35 @@ export async function action({ request }: ActionFunctionArgs) {
   const name = formData.get("name");
   const redirectTo = formData.get("redirectTo") || "/recipes";
 
-  if (!email) {
+  if (!email || typeof email !== "string") {
     return json({ errors: { email: "Email is required" } }, { status: 400 });
   }
 
-  if (!password) {
+  if (!password || typeof password !== "string") {
     return json({ errors: { password: "Password is required" } }, { status: 400 });
   }
 
-  if (!name) {
+  if (!name || typeof name !== "string") {
     return json({ errors: { name: "Name is required" } }, { status: 400 });
   }
 
-  // For demo purposes, create user in database
-  const userId = `demo-${email.toString().replace("@", "-").replace(".", "-")}`;
-  
-  try {
-    // Check if user already exists
-    const existingUser = await db.user.findUnique({
-      where: { email: email.toString() }
-    });
-    
-    if (existingUser) {
-      return json({ errors: { email: "A user with this email already exists" } }, { status: 400 });
-    }
+  if (password.length < 6) {
+    return json({ errors: { password: "Password must be at least 6 characters" } }, { status: 400 });
+  }
 
-    // Create new user
-    await db.user.create({
-      data: {
-        id: userId,
-        email: email.toString(),
-        name: name.toString(),
-        password: "demo-password" // This is just for demo, not a real auth system
-      }
-    });
-    
-    const session = await getSession(request.headers.get("Cookie"));
-    session.set("userId", userId);
+  try {
+    const user = await AuthService.createUser(email, password, name);
+    const { accessToken } = AuthService.generateTokens(user);
 
     return redirect(redirectTo.toString(), {
       headers: {
-        "Set-Cookie": await commitSession(session),
+        "Set-Cookie": createAuthCookie(accessToken),
       },
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      return json({ errors: { email: "A user with this email already exists" } }, { status: 400 });
+    }
     console.error("Signup error:", error);
     return json({ errors: { email: "Failed to create account" } }, { status: 500 });
   }

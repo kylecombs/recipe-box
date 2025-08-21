@@ -9,7 +9,6 @@ import {
 import type { LinksFunction, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { Header } from "~/components/Header";
-import { getUserId } from "~/utils/auth.server";
 
 import "./tailwind.css";
 
@@ -27,8 +26,15 @@ export const links: LinksFunction = () => [
 ];
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const userId = await getUserId(request);
-  return json({ userId });
+  try {
+    // Use safe auth import to prevent hydration issues
+    const { getUserId } = await import("~/utils/auth-safe.server");
+    const userId = await getUserId(request);
+    return json({ userId });
+  } catch (error) {
+    // Always provide consistent fallback
+    return json({ userId: null });
+  }
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {

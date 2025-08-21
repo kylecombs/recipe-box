@@ -1,0 +1,27 @@
+# Optional: Docker Compose for Caddy if you prefer containerized setup
+version: '3.8'
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: recipe-app-caddy
+    restart: unless-stopped
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - caddy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+networks:
+  caddy:
+    external: true
+
+volumes:
+  caddy_data:
+  caddy_config:
